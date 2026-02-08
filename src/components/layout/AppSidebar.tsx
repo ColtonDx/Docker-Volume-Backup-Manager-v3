@@ -49,7 +49,7 @@ export function AppSidebar() {
             <Container className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="font-semibold text-foreground">DockerVault</h1>
+            <h1 className="font-semibold text-foreground text-sm">Docker Volume</h1>
             <p className="text-xs text-muted-foreground">Backup Manager</p>
           </div>
         </div>

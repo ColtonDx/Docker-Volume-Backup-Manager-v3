@@ -23,8 +23,9 @@ const backupJobs = [
   { 
     id: 1, 
     name: "postgres-data", 
-    volume: "postgres_data", 
-    storage: "AWS S3", 
+    volume: "postgres_data",
+    labels: "backup.enable=true, backup.schedule=daily",
+    storage: "S3", 
     schedule: "Daily @ 23:00",
     rotation: "Keep 7 days",
     status: "active" as const,
@@ -34,8 +35,9 @@ const backupJobs = [
   { 
     id: 2, 
     name: "redis-backup", 
-    volume: "redis_data", 
-    storage: "Local NFS", 
+    volume: "redis_data",
+    labels: "backup.enable=true, backup.frequency=hourly",
+    storage: "Local FS", 
     schedule: "Hourly",
     rotation: "Keep 24 hours",
     status: "running" as const,
@@ -45,8 +47,9 @@ const backupJobs = [
   { 
     id: 3, 
     name: "mysql-production", 
-    volume: "mysql_data", 
-    storage: "Google Cloud", 
+    volume: "mysql_data",
+    labels: "backup.enable=true, backup.priority=high",
+    storage: "S3", 
     schedule: "Every 6 hours",
     rotation: "Keep 14 days",
     status: "error" as const,
@@ -56,8 +59,9 @@ const backupJobs = [
   { 
     id: 4, 
     name: "grafana-data", 
-    volume: "grafana_storage", 
-    storage: "AWS S3", 
+    volume: "grafana_storage",
+    labels: "backup.enable=true, backup.compress=true",
+    storage: "Backblaze", 
     schedule: "Daily @ 02:00",
     rotation: "Keep 30 days",
     status: "active" as const,
@@ -67,8 +71,9 @@ const backupJobs = [
   { 
     id: 5, 
     name: "nginx-configs", 
-    volume: "nginx_config", 
-    storage: "Backblaze B2", 
+    volume: "nginx_config",
+    labels: "backup.enable=true, backup.encrypt=true",
+    storage: "FTP", 
     schedule: "Weekly",
     rotation: "Keep 12 weeks",
     status: "idle" as const,
@@ -82,7 +87,7 @@ export default function BackupJobs() {
     <div>
       <PageHeader 
         title="Backup Jobs" 
-        description="Manage and monitor your Docker volume backup jobs"
+        description="Jobs are discovered automatically via Docker labels on volumes"
         action={
           <Button className="gap-2">
             <Plus className="h-4 w-4" />
@@ -98,9 +103,9 @@ export default function BackupJobs() {
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="text-muted-foreground">Job Name</TableHead>
                 <TableHead className="text-muted-foreground">Volume</TableHead>
+                <TableHead className="text-muted-foreground">Docker Labels</TableHead>
                 <TableHead className="text-muted-foreground">Storage</TableHead>
                 <TableHead className="text-muted-foreground">Schedule</TableHead>
-                <TableHead className="text-muted-foreground">Rotation</TableHead>
                 <TableHead className="text-muted-foreground">Status</TableHead>
                 <TableHead className="text-muted-foreground">Last Run</TableHead>
                 <TableHead className="text-muted-foreground text-right">Actions</TableHead>
@@ -118,9 +123,9 @@ export default function BackupJobs() {
                     </div>
                   </TableCell>
                   <TableCell className="font-mono text-sm text-muted-foreground">{job.volume}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground max-w-48 truncate">{job.labels}</TableCell>
                   <TableCell>{job.storage}</TableCell>
                   <TableCell className="text-sm">{job.schedule}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{job.rotation}</TableCell>
                   <TableCell><StatusBadge status={job.status} /></TableCell>
                   <TableCell className="text-sm text-muted-foreground">{job.lastRun}</TableCell>
                   <TableCell className="text-right">
