@@ -1,4 +1,4 @@
-import { Save, Shield, Database, Bell, Clock, Server } from "lucide-react";
+import { Save, Shield, Database, Bell, Clock, Server, CloudCog, Terminal } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -45,7 +46,7 @@ export default function Settings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Instance Name</Label>
-                <Input defaultValue="DockerVault Production" className="bg-background border-border" />
+                <Input defaultValue="Docker Volume Backup Manager" className="bg-background border-border" />
               </div>
               <div className="space-y-2">
                 <Label>Default Timezone</Label>
@@ -68,6 +69,63 @@ export default function Settings() {
                 <p className="text-sm text-muted-foreground">Pause all backup operations</p>
               </div>
               <Switch />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-border animate-fade-in">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <CloudCog className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Rclone Configuration</CardTitle>
+                <CardDescription>Configure rclone for additional storage backends</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Enable Rclone</Label>
+                <p className="text-sm text-muted-foreground">Use rclone for advanced storage operations</p>
+              </div>
+              <Switch />
+            </div>
+            <Separator className="bg-border" />
+            <div className="space-y-2">
+              <Label>Rclone Binary Path</Label>
+              <Input defaultValue="/usr/bin/rclone" className="bg-background border-border font-mono text-sm" />
+              <p className="text-xs text-muted-foreground">Path to the rclone executable</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Rclone Config File</Label>
+              <Input defaultValue="/root/.config/rclone/rclone.conf" className="bg-background border-border font-mono text-sm" />
+              <p className="text-xs text-muted-foreground">Path to the rclone configuration file</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Additional Rclone Flags</Label>
+              <Input placeholder="--transfers=4 --checkers=8" className="bg-background border-border font-mono text-sm" />
+              <p className="text-xs text-muted-foreground">Extra flags to pass to rclone commands</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Rclone Config (Optional)</Label>
+              <Textarea 
+                placeholder={`[remote-name]\ntype = s3\nprovider = AWS\naccess_key_id = xxx\nsecret_access_key = xxx`}
+                className="bg-background border-border font-mono text-sm min-h-32"
+              />
+              <p className="text-xs text-muted-foreground">Paste rclone configuration directly (will be merged with config file)</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="gap-2">
+                <Terminal className="h-4 w-4" />
+                Test Rclone
+              </Button>
+              <Button variant="outline" className="gap-2">
+                <CloudCog className="h-4 w-4" />
+                List Remotes
+              </Button>
             </div>
           </CardContent>
         </Card>

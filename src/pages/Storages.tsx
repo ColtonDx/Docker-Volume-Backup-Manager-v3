@@ -1,4 +1,4 @@
-import { Plus, HardDrive, Cloud, Server, Edit, Trash2, MoreVertical, RefreshCw } from "lucide-react";
+import { Plus, HardDrive, Cloud, Server, Edit, Trash2, MoreVertical, RefreshCw, FolderOpen, Database } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -15,55 +15,55 @@ import {
 const storages = [
   {
     id: 1,
-    name: "AWS S3 Production",
-    type: "s3",
-    provider: "Amazon S3",
-    icon: Cloud,
-    bucket: "company-backups-prod",
-    region: "us-east-1",
-    used: 856,
+    name: "Local Filesystem",
+    type: "localfs",
+    provider: "Local Directory",
+    icon: FolderOpen,
+    path: "/backup/volumes",
+    region: "Local",
+    used: 450,
     total: 1000,
-    status: "active" as const,
-    jobs: 12,
-  },
-  {
-    id: 2,
-    name: "Local NFS Storage",
-    type: "nfs",
-    provider: "NFS Mount",
-    icon: Server,
-    bucket: "/mnt/backup-storage",
-    region: "On-premise",
-    used: 2100,
-    total: 5000,
-    status: "active" as const,
-    jobs: 4,
-  },
-  {
-    id: 3,
-    name: "Google Cloud Storage",
-    type: "gcs",
-    provider: "Google Cloud",
-    icon: Cloud,
-    bucket: "company-backups-gcp",
-    region: "us-central1",
-    used: 234,
-    total: 500,
     status: "active" as const,
     jobs: 3,
   },
   {
-    id: 4,
+    id: 2,
+    name: "AWS S3 Production",
+    type: "s3",
+    provider: "Amazon S3",
+    icon: Cloud,
+    path: "company-backups-prod",
+    region: "us-east-1",
+    used: 856,
+    total: 2000,
+    status: "active" as const,
+    jobs: 8,
+  },
+  {
+    id: 3,
     name: "Backblaze B2",
-    type: "b2",
+    type: "backblaze",
     provider: "Backblaze B2",
-    icon: HardDrive,
-    bucket: "company-archives",
+    icon: Database,
+    path: "docker-volume-backups",
     region: "US West",
     used: 1890,
     total: 2000,
     status: "warning" as const,
     jobs: 5,
+  },
+  {
+    id: 4,
+    name: "FTP Server",
+    type: "ftp",
+    provider: "FTP/SFTP",
+    icon: Server,
+    path: "ftp.backup.company.com:/backups",
+    region: "On-premise",
+    used: 234,
+    total: 500,
+    status: "active" as const,
+    jobs: 2,
   },
 ];
 
@@ -74,12 +74,27 @@ function formatStorage(gb: number): string {
   return `${gb} GB`;
 }
 
+function getStorageTypeLabel(type: string): string {
+  switch (type) {
+    case "localfs":
+      return "Local FS";
+    case "s3":
+      return "S3";
+    case "backblaze":
+      return "Backblaze";
+    case "ftp":
+      return "FTP";
+    default:
+      return type;
+  }
+}
+
 export default function Storages() {
   return (
     <div>
       <PageHeader 
         title="Backend Storages" 
-        description="Configure storage backends for your backups"
+        description="Configure storage backends: Local FS, S3, Backblaze, or FTP"
         action={
           <Button className="gap-2">
             <Plus className="h-4 w-4" />
@@ -107,6 +122,9 @@ export default function Storages() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <span className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground font-mono">
+                      {getStorageTypeLabel(storage.type)}
+                    </span>
                     <StatusBadge status={storage.status} />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -133,8 +151,8 @@ export default function Storages() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Bucket/Path</span>
-                    <p className="font-mono text-xs truncate mt-0.5">{storage.bucket}</p>
+                    <span className="text-muted-foreground">Path/Bucket</span>
+                    <p className="font-mono text-xs truncate mt-0.5">{storage.path}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Region</span>
