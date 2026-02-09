@@ -1,8 +1,27 @@
+import { useState } from "react";
 import { Plus, MoreVertical, Play, Pause, Trash2, Edit, Database } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,16 +102,86 @@ const backupJobs = [
 ];
 
 export default function BackupJobs() {
+  const [dialogOpen, setDialogOpen] = useState(false);
+
   return (
     <div>
       <PageHeader 
         title="Backup Jobs" 
         description="Containers with matching Docker labels are stopped during backup, then restarted"
         action={
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Backup Job
-          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Backup Job
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Create Backup Job</DialogTitle>
+                <DialogDescription>
+                  Containers with the matching Docker label will be stopped during backup.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="job-name">Job Name</Label>
+                  <Input id="job-name" placeholder="e.g. postgres-data" className="bg-background border-border" />
+                  <p className="text-xs text-muted-foreground">
+                    Containers with label <code className="text-foreground">Backup=job-name</code> will be matched
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="storage">Storage Backend</Label>
+                  <Select>
+                    <SelectTrigger className="bg-background border-border">
+                      <SelectValue placeholder="Select storage" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      <SelectItem value="localfs">Local FS</SelectItem>
+                      <SelectItem value="s3">S3</SelectItem>
+                      <SelectItem value="backblaze">Backblaze</SelectItem>
+                      <SelectItem value="ftp">FTP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="schedule">Schedule</Label>
+                  <Select>
+                    <SelectTrigger className="bg-background border-border">
+                      <SelectValue placeholder="Select schedule" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      <SelectItem value="hourly">Hourly</SelectItem>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="6hours">Every 6 hours</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="rotation">Rotation Policy</Label>
+                  <Select>
+                    <SelectTrigger className="bg-background border-border">
+                      <SelectValue placeholder="Select rotation" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      <SelectItem value="24h">Keep 24 hours</SelectItem>
+                      <SelectItem value="7d">Keep 7 days</SelectItem>
+                      <SelectItem value="14d">Keep 14 days</SelectItem>
+                      <SelectItem value="30d">Keep 30 days</SelectItem>
+                      <SelectItem value="12w">Keep 12 weeks</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button onClick={() => setDialogOpen(false)}>Create Job</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         }
       />
 
