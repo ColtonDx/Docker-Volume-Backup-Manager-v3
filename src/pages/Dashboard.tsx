@@ -6,11 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
 const recentJobs = [
-  { id: 1, name: "postgres-data", volume: "postgres_data", status: "success" as const, time: "2 min ago", size: "2.4 GB" },
-  { id: 2, name: "redis-backup", volume: "redis_data", status: "running" as const, time: "Now", size: "156 MB" },
-  { id: 3, name: "nginx-configs", volume: "nginx_config", status: "success" as const, time: "1 hour ago", size: "12 MB" },
-  { id: 4, name: "mysql-production", volume: "mysql_data", status: "error" as const, time: "3 hours ago", size: "Failed" },
-  { id: 5, name: "grafana-data", volume: "grafana_storage", status: "success" as const, time: "6 hours ago", size: "890 MB" },
+  { id: 1, name: "postgres-data", containers: "postgres-main, postgres-replica", status: "success" as const, time: "2 min ago", size: "2.4 GB" },
+  { id: 2, name: "redis-cache", containers: "redis-primary", status: "running" as const, time: "Now", size: "156 MB" },
+  { id: 3, name: "nginx-configs", containers: "nginx-proxy, nginx-web", status: "success" as const, time: "1 hour ago", size: "12 MB" },
+  { id: 4, name: "mysql-production", containers: "mysql-db, mysql-sidecar", status: "error" as const, time: "3 hours ago", size: "Failed" },
+  { id: 5, name: "grafana-data", containers: "grafana", status: "success" as const, time: "6 hours ago", size: "890 MB" },
 ];
 
 const upcomingSchedules = [
@@ -86,7 +86,7 @@ export default function Dashboard() {
     <div>
       <PageHeader 
         title="Dashboard" 
-        description="Overview of your Docker volume backup system"
+        description="Overview of your Docker container backup system"
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -166,9 +166,9 @@ export default function Dashboard() {
                     <div className="h-9 w-9 rounded-lg bg-secondary flex items-center justify-center">
                       <Database className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <div>
-                      <p className="font-medium text-sm">{job.name}</p>
-                      <p className="text-xs text-muted-foreground font-mono">{job.volume}</p>
+                     <div>
+                       <p className="font-medium text-sm">{job.name}</p>
+                       <p className="text-xs text-muted-foreground">{job.containers}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">

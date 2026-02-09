@@ -23,8 +23,8 @@ const backupJobs = [
   { 
     id: 1, 
     name: "postgres-data", 
-    volume: "postgres_data",
-    labels: "backup.enable=true, backup.schedule=daily",
+    label: "Backup=postgres-data",
+    containers: "postgres-main, postgres-replica",
     storage: "S3", 
     schedule: "Daily @ 23:00",
     rotation: "Keep 7 days",
@@ -34,9 +34,9 @@ const backupJobs = [
   },
   { 
     id: 2, 
-    name: "redis-backup", 
-    volume: "redis_data",
-    labels: "backup.enable=true, backup.frequency=hourly",
+    name: "redis-cache", 
+    label: "Backup=redis-cache",
+    containers: "redis-primary",
     storage: "Local FS", 
     schedule: "Hourly",
     rotation: "Keep 24 hours",
@@ -47,8 +47,8 @@ const backupJobs = [
   { 
     id: 3, 
     name: "mysql-production", 
-    volume: "mysql_data",
-    labels: "backup.enable=true, backup.priority=high",
+    label: "Backup=mysql-production",
+    containers: "mysql-db, mysql-sidecar",
     storage: "S3", 
     schedule: "Every 6 hours",
     rotation: "Keep 14 days",
@@ -59,8 +59,8 @@ const backupJobs = [
   { 
     id: 4, 
     name: "grafana-data", 
-    volume: "grafana_storage",
-    labels: "backup.enable=true, backup.compress=true",
+    label: "Backup=grafana-data",
+    containers: "grafana",
     storage: "Backblaze", 
     schedule: "Daily @ 02:00",
     rotation: "Keep 30 days",
@@ -71,8 +71,8 @@ const backupJobs = [
   { 
     id: 5, 
     name: "nginx-configs", 
-    volume: "nginx_config",
-    labels: "backup.enable=true, backup.encrypt=true",
+    label: "Backup=nginx-configs",
+    containers: "nginx-proxy, nginx-web",
     storage: "FTP", 
     schedule: "Weekly",
     rotation: "Keep 12 weeks",
@@ -87,7 +87,7 @@ export default function BackupJobs() {
     <div>
       <PageHeader 
         title="Backup Jobs" 
-        description="Jobs are discovered automatically via Docker labels on volumes"
+        description="Containers with matching Docker labels are stopped during backup, then restarted"
         action={
           <Button className="gap-2">
             <Plus className="h-4 w-4" />
@@ -102,8 +102,8 @@ export default function BackupJobs() {
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="text-muted-foreground">Job Name</TableHead>
-                <TableHead className="text-muted-foreground">Volume</TableHead>
-                <TableHead className="text-muted-foreground">Docker Labels</TableHead>
+                <TableHead className="text-muted-foreground">Docker Label</TableHead>
+                <TableHead className="text-muted-foreground">Matched Containers</TableHead>
                 <TableHead className="text-muted-foreground">Storage</TableHead>
                 <TableHead className="text-muted-foreground">Schedule</TableHead>
                 <TableHead className="text-muted-foreground">Status</TableHead>
@@ -122,8 +122,8 @@ export default function BackupJobs() {
                       <span className="font-medium">{job.name}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-sm text-muted-foreground">{job.volume}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground max-w-48 truncate">{job.labels}</TableCell>
+                  <TableCell className="font-mono text-sm text-muted-foreground">{job.label}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground max-w-48 truncate">{job.containers}</TableCell>
                   <TableCell>{job.storage}</TableCell>
                   <TableCell className="text-sm">{job.schedule}</TableCell>
                   <TableCell><StatusBadge status={job.status} /></TableCell>
