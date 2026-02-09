@@ -7,8 +7,10 @@ import {
   FileText, 
   Settings,
   Container,
-  LayoutDashboard
+  LayoutDashboard,
+  LogOut
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -41,6 +43,8 @@ const systemNavItems = [
 ];
 
 export function AppSidebar() {
+  const { logout } = useAuth();
+  
   return (
     <Sidebar className="border-r border-border">
       <SidebarHeader className="border-b border-border p-4">
@@ -131,9 +135,18 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border p-4">
-        <div className="flex items-center gap-2">
-          <div className="status-dot status-dot-active" />
-          <span className="text-xs text-muted-foreground">System Online</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="status-dot status-dot-active" />
+            <span className="text-xs text-muted-foreground">System Online</span>
+          </div>
+          <button
+            onClick={logout}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+          </button>
         </div>
       </SidebarFooter>
     </Sidebar>
