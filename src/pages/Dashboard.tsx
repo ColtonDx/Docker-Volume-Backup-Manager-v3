@@ -63,10 +63,10 @@ export default function Dashboard() {
       <PageHeader title="Dashboard" description="Overview of your Docker container backup system" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <DataCard title="Total Backup Jobs" value={stats.total_jobs} subtitle={`${stats.active_jobs} active`} icon={Database} />
-        <DataCard title="Storage Backends" value={stats.storage_backends_count} subtitle="Configured backends" icon={HardDrive} />
-        <DataCard title="Success Rate" value={`${stats.success_rate_30d}%`} subtitle="Last 30 days" icon={CheckCircle} />
-        <DataCard title="Active Alerts" value={stats.active_alerts} subtitle="Last 24 hours" icon={AlertTriangle} />
+        <DataCard title="Total Backup Jobs" value={stats.total_jobs} subtitle={`${stats.active_jobs} active`} icon={Database} href="/jobs" />
+        <DataCard title="Storage Backends" value={stats.storage_backends_count} subtitle="Configured backends" icon={HardDrive} href="/storages" />
+        <DataCard title="Success Rate" value={`${stats.success_rate_30d}%`} subtitle="Last 30 days" icon={CheckCircle} href="/logs" />
+        <DataCard title="Active Alerts" value={stats.active_alerts} subtitle="Last 24 hours" icon={AlertTriangle} href="/logs" />
       </div>
 
       {stats.storage_usage.length > 0 && (

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Shield, Database, Bell, Clock, Server, CloudCog, Terminal } from "lucide-react";
+import { Save, Shield, Database, Bell, Clock, Server, CloudCog, Terminal, Palette, Check } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -17,9 +17,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { fetchSettings, updateSettings, resetSettings, clearLogs } from "@/api";
+import { useColorTheme, type ColorTheme } from "@/contexts/ColorThemeContext";
 
 export default function Settings() {
   const queryClient = useQueryClient();
+  const { colorTheme, setColorTheme } = useColorTheme();
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -67,6 +69,43 @@ export default function Settings() {
       />
 
       <div className="space-y-6">
+        <Card className="glass-panel border-border animate-fade-in">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Palette className="h-5 w-5 text-primary" /></div>
+              <div><CardTitle className="text-lg">Appearance</CardTitle><CardDescription>Choose a color theme for the interface</CardDescription></div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {([
+                { id: "cyan" as ColorTheme, label: "Cyan", swatch: "bg-[hsl(192,91%,36%)]" },
+                { id: "purple" as ColorTheme, label: "Purple", swatch: "bg-[hsl(270,65%,50%)]" },
+                { id: "red" as ColorTheme, label: "Red", swatch: "bg-[hsl(0,72%,51%)]" },
+                { id: "green" as ColorTheme, label: "Green", swatch: "bg-[hsl(152,69%,36%)]" },
+              ]).map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setColorTheme(t.id)}
+                  className={`relative flex flex-col items-center gap-3 rounded-lg border-2 p-4 transition-all hover:border-primary/60 ${
+                    colorTheme === t.id
+                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                      : "border-border bg-card"
+                  }`}
+                >
+                  <div className={`h-10 w-10 rounded-full ${t.swatch} shadow-md`} />
+                  <span className="text-sm font-medium">{t.label}</span>
+                  {colorTheme === t.id && (
+                    <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                      <Check className="h-3 w-3 text-primary-foreground" />
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="glass-panel border-border animate-fade-in">
           <CardHeader>
             <div className="flex items-center gap-3">

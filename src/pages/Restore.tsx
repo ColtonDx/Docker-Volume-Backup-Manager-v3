@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { RotateCcw, Download, Search, Filter, RefreshCw, CheckCircle, Clock, AlertTriangle, Database } from "lucide-react";
+import { useState, useMemo } from "react";
+import { RotateCcw, Search, RefreshCw, CheckCircle, Clock, Database, CalendarIcon, X } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -32,7 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchBackups, restoreBackup, deleteBackup } from "@/api";
+import { fetchBackups, restoreBackup, fetchJobs } from "@/api";
 import type { BackupRecord } from "@/api/types";
 
 function formatSize(bytes: number | null): string {
@@ -57,17 +58,40 @@ function formatDate(dateStr: string | null): string {
 
 export default function Restore() {
   const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [jobFilter, setJobFilter] = useState("all");
+  const [volumeFilter, setVolumeFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [restoreId, setRestoreId] = useState<number | null>(null);
 
-  const { data: backups = [], isLoading, refetch } = useQuery({
-    queryKey: ["backups", statusFilter],
-    queryFn: () => fetchBackups({
-      status: statusFilter !== "all" ? statusFilter : undefined,
-      limit: 200,
-    }),
+  // Only fetch restorable backups (success + warning)
+  const { data: successBackups = [], isLoading: loadingSuccess, refetch: refetchSuccess } = useQuery({
+    queryKey: ["backups", "success"],
+    queryFn: () => fetchBackups({ status: "success", limit: 500 }),
   });
+  const { data: warningBackups = [], isLoading: loadingWarning, refetch: refetchWarning } = useQuery({
+    queryKey: ["backups", "warning"],
+    queryFn: () => fetchBackups({ status: "warning", limit: 500 }),
+  });
+  const isLoading = loadingSuccess || loadingWarning;
+  const backups = useMemo(() =>
+    [...successBackups, ...warningBackups].sort((a, b) =>
+      new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+    ), [successBackups, warningBackups]);
+
+  const refetch = () => { refetchSuccess(); refetchWarning(); };
+
+  // Get jobs list for the filter dropdown
+  const { data: jobs = [] } = useQuery({ queryKey: ["jobs"], queryFn: fetchJobs });
+
+  // Derive unique job names and volume names from the backup data
+  const jobNames = useMemo(() => [...new Set(backups.map((b) => b.job_name))].sort(), [backups]);
+  const allVolumes = useMemo(() => {
+    const set = new Set<string>();
+    backups.forEach((b) => b.volumes_backed_up.forEach((v) => set.add(v)));
+    return [...set].sort();
+  }, [backups]);
 
   const restoreMutation = useMutation({
     mutationFn: restoreBackup,
@@ -79,23 +103,40 @@ export default function Restore() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const filtered = backups.filter((b) => {
+  const filtered = useMemo(() => backups.filter((b) => {
+    // Text search
     if (search) {
       const s = search.toLowerCase();
       if (!b.job_name.toLowerCase().includes(s) && !b.storage_path?.toLowerCase().includes(s)) {
         return false;
       }
     }
+    // Job filter
+    if (jobFilter !== "all" && b.job_name !== jobFilter) return false;
+    // Volume filter
+    if (volumeFilter && !b.volumes_backed_up.some((v) => v.toLowerCase().includes(volumeFilter.toLowerCase()))) return false;
+    // Date from
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      if (new Date(b.started_at) < from) return false;
+    }
+    // Date to
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      if (new Date(b.started_at) > to) return false;
+    }
     return true;
-  });
+  }), [backups, search, jobFilter, volumeFilter, dateFrom, dateTo]);
 
-  const successCount = backups.filter((b) => b.status === "success").length;
+  const hasActiveFilters = search || jobFilter !== "all" || volumeFilter || dateFrom || dateTo;
+  const clearFilters = () => { setSearch(""); setJobFilter("all"); setVolumeFilter(""); setDateFrom(""); setDateTo(""); };
 
   return (
     <div>
       <PageHeader
         title="Restore"
-        description="Browse backup history and restore volumes from previous backups"
+        description="Browse restorable backups and restore volumes from previous backups"
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -107,7 +148,7 @@ export default function Restore() {
               </div>
               <div>
                 <p className="text-2xl font-semibold">{backups.length}</p>
-                <p className="text-sm text-muted-foreground">Total Backups</p>
+                <p className="text-sm text-muted-foreground">Restorable Backups</p>
               </div>
             </div>
           </CardContent>
@@ -119,8 +160,8 @@ export default function Restore() {
                 <CheckCircle className="h-6 w-6 text-success" />
               </div>
               <div>
-                <p className="text-2xl font-semibold">{successCount}</p>
-                <p className="text-sm text-muted-foreground">Restorable Backups</p>
+                <p className="text-2xl font-semibold">{jobNames.length}</p>
+                <p className="text-sm text-muted-foreground">Jobs With Backups</p>
               </div>
             </div>
           </CardContent>
@@ -144,33 +185,67 @@ export default function Restore() {
 
       <Card className="glass-panel border-border animate-fade-in">
         <CardHeader className="border-b border-border">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by job name or path..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 bg-background border-border"
-              />
+          <div className="space-y-4">
+            {/* Row 1: Search + refresh */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by job name or path..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 bg-background border-border"
+                />
+              </div>
+              <div className="flex gap-2">
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={clearFilters}>
+                    <X className="h-3.5 w-3.5" /> Clear
+                  </Button>
+                )}
+                <Button variant="outline" size="icon" className="border-border" onClick={() => refetch()}>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[140px] bg-background border-border">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Filter" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border">
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="success">Success</SelectItem>
-                  <SelectItem value="error">Error</SelectItem>
-                  <SelectItem value="running">Running</SelectItem>
-                  <SelectItem value="warning">Warning</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="icon" className="border-border" onClick={() => refetch()}>
-                <RefreshCw className="h-4 w-4" />
-              </Button>
+            {/* Row 2: Filters */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="space-y-1 flex-1">
+                <Label className="text-xs text-muted-foreground">Job</Label>
+                <Select value={jobFilter} onValueChange={setJobFilter}>
+                  <SelectTrigger className="bg-background border-border">
+                    <SelectValue placeholder="All Jobs" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    <SelectItem value="all">All Jobs</SelectItem>
+                    {jobNames.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 flex-1">
+                <Label className="text-xs text-muted-foreground">Volume</Label>
+                <Select value={volumeFilter || "__all__"} onValueChange={(v) => setVolumeFilter(v === "__all__" ? "" : v)}>
+                  <SelectTrigger className="bg-background border-border">
+                    <SelectValue placeholder="All Volumes" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    <SelectItem value="__all__">All Volumes</SelectItem>
+                    {allVolumes.map((vol) => (
+                      <SelectItem key={vol} value={vol}>{vol}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">From</Label>
+                <Input type="date" className="bg-background border-border w-[160px]" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">To</Label>
+                <Input type="date" className="bg-background border-border w-[160px]" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -179,7 +254,7 @@ export default function Restore() {
             <div className="p-8 text-center text-muted-foreground">Loading backups...</div>
           ) : filtered.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
-              No backups found. Run a backup job first.
+              {backups.length === 0 ? "No restorable backups found. Run a backup job first." : "No backups match the current filters."}
             </div>
           ) : (
             <Table>
@@ -221,18 +296,16 @@ export default function Restore() {
                       {formatDate(backup.started_at)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 border-border"
-                          disabled={backup.status !== "success" || restoreMutation.isPending}
-                          onClick={() => setRestoreId(backup.id)}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          Restore
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 border-border"
+                        disabled={restoreMutation.isPending}
+                        onClick={() => setRestoreId(backup.id)}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Restore
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

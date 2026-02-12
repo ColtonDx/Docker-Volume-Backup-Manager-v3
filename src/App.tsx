@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ColorThemeProvider } from "@/contexts/ColorThemeContext";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Login from "./pages/Login";
 import Index from "./pages/Index";
@@ -48,15 +49,17 @@ function AppRoutes() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AuthProvider>
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </AuthProvider>
-      </TooltipProvider>
+      <ColorThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AuthProvider>
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </AuthProvider>
+        </TooltipProvider>
+      </ColorThemeProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

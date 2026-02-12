@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { LucideIcon } from "lucide-react";
 
@@ -12,14 +13,22 @@ interface DataCardProps {
     isPositive: boolean;
   };
   className?: string;
+  href?: string;
 }
 
-export function DataCard({ title, value, subtitle, icon: Icon, trend, className }: DataCardProps) {
+export function DataCard({ title, value, subtitle, icon: Icon, trend, className, href }: DataCardProps) {
+  const navigate = useNavigate();
+
   return (
-    <div className={cn(
-      "glass-panel p-5 animate-fade-in",
-      className
-    )}>
+    <div
+      className={cn(
+        "glass-panel p-5 animate-fade-in",
+        href && "cursor-pointer hover:border-primary/40 hover:bg-muted/30 transition-colors",
+        className
+      )}
+      onClick={href ? () => navigate(href) : undefined}
+      role={href ? "link" : undefined}
+    >
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-muted-foreground">{title}</p>

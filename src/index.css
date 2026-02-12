@@ -160,3 +160,64 @@
     @apply bg-gradient-to-r from-primary to-cyan-300 bg-clip-text text-transparent;
   }
 }
+
+/* ================================================
+   COLOR THEMES — override primary/accent variables
+   ================================================ */
+
+/* ---------- Purple ---------- */
+[data-theme="purple"] {
+  --primary: 270 65% 50%;
+  --accent: 270 65% 50%;
+  --ring: 270 65% 50%;
+  --sidebar-primary: 270 65% 50%;
+  --sidebar-ring: 270 65% 50%;
+  --chart-1: 270 65% 50%;
+}
+.dark[data-theme="purple"],
+[data-theme="purple"].dark {
+  --primary: 270 65% 62%;
+  --accent: 270 65% 62%;
+  --ring: 270 65% 62%;
+  --sidebar-primary: 270 65% 62%;
+  --sidebar-ring: 270 65% 62%;
+  --chart-1: 270 65% 62%;
+}
+
+/* ---------- Red ---------- */
+[data-theme="red"] {
+  --primary: 0 72% 51%;
+  --accent: 0 72% 51%;
+  --ring: 0 72% 51%;
+  --sidebar-primary: 0 72% 51%;
+  --sidebar-ring: 0 72% 51%;
+  --chart-1: 0 72% 51%;
+}
+.dark[data-theme="red"],
+[data-theme="red"].dark {
+  --primary: 0 72% 60%;
+  --accent: 0 72% 60%;
+  --ring: 0 72% 60%;
+  --sidebar-primary: 0 72% 60%;
+  --sidebar-ring: 0 72% 60%;
+  --chart-1: 0 72% 60%;
+}
+
+/* ---------- Green ---------- */
+[data-theme="green"] {
+  --primary: 152 69% 36%;
+  --accent: 152 69% 36%;
+  --ring: 152 69% 36%;
+  --sidebar-primary: 152 69% 36%;
+  --sidebar-ring: 152 69% 36%;
+  --chart-1: 152 69% 36%;
+}
+.dark[data-theme="green"],
+[data-theme="green"].dark {
+  --primary: 152 69% 46%;
+  --accent: 152 69% 46%;
+  --ring: 152 69% 46%;
+  --sidebar-primary: 152 69% 46%;
+  --sidebar-ring: 152 69% 46%;
+  --chart-1: 152 69% 46%;
+}
