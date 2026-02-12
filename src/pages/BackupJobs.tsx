@@ -44,17 +44,49 @@ export default function BackupJobs() {
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [newJob, setNewJob] = useState({ name: "", storage: "", schedule: "", rotation: "" });
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [formData, setFormData] = useState({ name: "", storage: "", schedule: "", rotation: "" });
 
-  const handleCreate = () => {
-    if (!newJob.name || !newJob.storage || !newJob.schedule || !newJob.rotation) return;
-    setJobs((prev) => [...prev, {
-      id: Date.now(), name: newJob.name, label: `Backup=${newJob.name}`, containers: "—",
-      storage: storageMap[newJob.storage], schedule: scheduleMap[newJob.schedule],
-      rotation: rotationMap[newJob.rotation], status: "idle", lastRun: "Never", nextRun: "Pending",
-    }]);
-    toast.success(`Job "${newJob.name}" created`);
-    setNewJob({ name: "", storage: "", schedule: "", rotation: "" });
+  const storageReverseMap: Record<string, string> = Object.fromEntries(Object.entries(storageMap).map(([k, v]) => [v, k]));
+  const scheduleReverseMap: Record<string, string> = Object.fromEntries(Object.entries(scheduleMap).map(([k, v]) => [v, k]));
+  const rotationReverseMap: Record<string, string> = Object.fromEntries(Object.entries(rotationMap).map(([k, v]) => [v, k]));
+
+  const openCreate = () => {
+    setEditingJob(null);
+    setFormData({ name: "", storage: "", schedule: "", rotation: "" });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (job: Job) => {
+    setEditingJob(job);
+    setFormData({
+      name: job.name,
+      storage: storageReverseMap[job.storage] || "",
+      schedule: scheduleReverseMap[job.schedule] || "",
+      rotation: rotationReverseMap[job.rotation] || "",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!formData.name || !formData.storage || !formData.schedule || !formData.rotation) return;
+    if (editingJob) {
+      setJobs((prev) => prev.map((j) => j.id === editingJob.id ? {
+        ...j, name: formData.name, label: `Backup=${formData.name}`,
+        storage: storageMap[formData.storage], schedule: scheduleMap[formData.schedule],
+        rotation: rotationMap[formData.rotation],
+      } : j));
+      toast.success(`Job "${formData.name}" updated`);
+    } else {
+      setJobs((prev) => [...prev, {
+        id: Date.now(), name: formData.name, label: `Backup=${formData.name}`, containers: "—",
+        storage: storageMap[formData.storage], schedule: scheduleMap[formData.schedule],
+        rotation: rotationMap[formData.rotation], status: "idle", lastRun: "Never", nextRun: "Pending",
+      }]);
+      toast.success(`Job "${formData.name}" created`);
+    }
+    setFormData({ name: "", storage: "", schedule: "", rotation: "" });
+    setEditingJob(null);
     setDialogOpen(false);
   };
 
@@ -71,24 +103,24 @@ export default function BackupJobs() {
         title="Backup Jobs"
         description="Containers with matching Docker labels are stopped during backup, then restarted"
         action={
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingJob(null); }}>
             <DialogTrigger asChild>
-              <Button className="gap-2"><Plus className="h-4 w-4" />New Backup Job</Button>
+              <Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" />New Backup Job</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Create Backup Job</DialogTitle>
+                <DialogTitle>{editingJob ? "Edit Backup Job" : "Create Backup Job"}</DialogTitle>
                 <DialogDescription>Containers with the matching Docker label will be stopped during backup.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
                   <Label htmlFor="job-name">Job Name</Label>
-                  <Input id="job-name" placeholder="e.g. postgres-data" className="bg-background border-border" value={newJob.name} onChange={(e) => setNewJob((p) => ({ ...p, name: e.target.value }))} />
-                  <p className="text-xs text-muted-foreground">Containers with label <code className="text-foreground">Backup={newJob.name || "job-name"}</code> will be matched</p>
+                  <Input id="job-name" placeholder="e.g. postgres-data" className="bg-background border-border" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+                  <p className="text-xs text-muted-foreground">Containers with label <code className="text-foreground">Backup={formData.name || "job-name"}</code> will be matched</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Storage Backend</Label>
-                  <Select value={newJob.storage} onValueChange={(v) => setNewJob((p) => ({ ...p, storage: v }))}>
+                  <Select value={formData.storage} onValueChange={(v) => setFormData((p) => ({ ...p, storage: v }))}>
                     <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select storage" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
                       <SelectItem value="localfs">Local FS</SelectItem><SelectItem value="s3">S3</SelectItem>
@@ -98,7 +130,7 @@ export default function BackupJobs() {
                 </div>
                 <div className="space-y-2">
                   <Label>Schedule</Label>
-                  <Select value={newJob.schedule} onValueChange={(v) => setNewJob((p) => ({ ...p, schedule: v }))}>
+                  <Select value={formData.schedule} onValueChange={(v) => setFormData((p) => ({ ...p, schedule: v }))}>
                     <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select schedule" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
                       <SelectItem value="hourly">Hourly</SelectItem><SelectItem value="daily">Daily</SelectItem>
@@ -108,7 +140,7 @@ export default function BackupJobs() {
                 </div>
                 <div className="space-y-2">
                   <Label>Rotation Policy</Label>
-                  <Select value={newJob.rotation} onValueChange={(v) => setNewJob((p) => ({ ...p, rotation: v }))}>
+                  <Select value={formData.rotation} onValueChange={(v) => setFormData((p) => ({ ...p, rotation: v }))}>
                     <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select rotation" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
                       <SelectItem value="24h">Keep 24 hours</SelectItem><SelectItem value="7d">Keep 7 days</SelectItem>
@@ -120,7 +152,7 @@ export default function BackupJobs() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreate}>Create Job</Button>
+                <Button onClick={handleSave}>{editingJob ? "Save Changes" : "Create Job"}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -167,7 +199,7 @@ export default function BackupJobs() {
                       <DropdownMenuContent align="end" className="bg-popover border-border">
                         <DropdownMenuItem className="gap-2 cursor-pointer"><Play className="h-4 w-4" /> Run Now</DropdownMenuItem>
                         <DropdownMenuItem className="gap-2 cursor-pointer"><Pause className="h-4 w-4" /> Pause Job</DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer"><Edit className="h-4 w-4" /> Edit</DropdownMenuItem>
+                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => openEdit(job)}><Edit className="h-4 w-4" /> Edit</DropdownMenuItem>
                         <DropdownMenuSeparator className="bg-border" />
                         <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeleteId(job.id)}>
                           <Trash2 className="h-4 w-4" /> Delete
