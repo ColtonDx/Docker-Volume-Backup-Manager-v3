@@ -1,0 +1,170 @@
+"""Notification service.
+
+Sends notifications via email, Slack webhook, or generic webhook
+when backup events occur.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import smtplib
+from datetime import datetime, timezone
+from email.mime.text import MIMEText
+from typing import Any
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+
+class NotificationService:
+    """Dispatches notifications to configured channels."""
+
+    def notify_event(self, event: str, job_name: str, message: str) -> None:
+        """Send notifications to all channels subscribed to this event type.
+
+        event: "success" | "failure" | "warning"
+        """
+        from app.database import SessionLocal
+        from app.models import NotificationChannel
+
+        db = SessionLocal()
+        try:
+            channels = (
+                db.query(NotificationChannel)
+                .filter(NotificationChannel.enabled == True)
+                .all()
+            )
+            for ch in channels:
+                events = json.loads(ch.events_json or "[]")
+                if event not in events:
+                    continue
+
+                config = json.loads(ch.config_json or "{}")
+                try:
+                    self._send(ch.type, config, job_name, event, message)
+                    ch.last_triggered_at = datetime.now(timezone.utc)
+                except Exception as exc:
+                    logger.error("Failed to send %s notification '%s': %s", ch.type, ch.name, exc)
+
+            db.commit()
+        except Exception as exc:
+            logger.exception("Notification dispatch failed: %s", exc)
+        finally:
+            db.close()
+
+    def send_test(self, channel_type: str, config: dict[str, Any]) -> tuple[bool, str]:
+        """Send a test notification. Returns (success, message)."""
+        try:
+            self._send(channel_type, config, "Test Job", "info", "This is a test notification from Backup Buddy")
+            return True, "Test notification sent successfully"
+        except Exception as exc:
+            return False, str(exc)
+
+    # ------------------------------------------------------------------
+    # Dispatchers
+    # ------------------------------------------------------------------
+
+    def _send(
+        self, channel_type: str, config: dict[str, Any],
+        job_name: str, event: str, message: str,
+    ) -> None:
+        if channel_type == "email":
+            self._send_email(config, job_name, event, message)
+        elif channel_type == "slack":
+            self._send_slack(config, job_name, event, message)
+        elif channel_type == "webhook":
+            self._send_webhook(config, job_name, event, message)
+        else:
+            logger.warning("Unknown notification type: %s", channel_type)
+
+    # ------------------------------------------------------------------
+    # Email
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _send_email(config: dict, job_name: str, event: str, message: str) -> None:
+        host = config.get("smtp_host", "localhost")
+        port = config.get("smtp_port", 587)
+        username = config.get("smtp_username", "")
+        password = config.get("smtp_password", "")
+        from_addr = config.get("from_address", f"backup-buddy@{host}")
+        to_addrs = config.get("to_addresses", [])
+        use_tls = config.get("use_tls", True)
+
+        if isinstance(to_addrs, str):
+            to_addrs = [to_addrs]
+
+        subject = f"[Backup Buddy] {event.upper()}: {job_name}"
+        body = f"Job: {job_name}\nEvent: {event}\n\n{message}"
+
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = from_addr
+        msg["To"] = ", ".join(to_addrs)
+
+        with smtplib.SMTP(host, port) as server:
+            if use_tls:
+                server.starttls()
+            if username:
+                server.login(username, password)
+            server.send_message(msg)
+
+        logger.info("Email sent to %s", ", ".join(to_addrs))
+
+    # ------------------------------------------------------------------
+    # Slack
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _send_slack(config: dict, job_name: str, event: str, message: str) -> None:
+        webhook_url = config.get("webhook_url", "")
+        if not webhook_url:
+            raise ValueError("Slack webhook URL not configured")
+
+        emoji = {"success": ":white_check_mark:", "failure": ":x:", "warning": ":warning:"}.get(event, ":information_source:")
+
+        payload = {
+            "text": f"{emoji} *Backup Buddy – {event.upper()}*\n*Job:* {job_name}\n{message}",
+        }
+
+        channel = config.get("channel")
+        if channel:
+            payload["channel"] = channel
+
+        resp = httpx.post(webhook_url, json=payload, timeout=10)
+        resp.raise_for_status()
+        logger.info("Slack notification sent")
+
+    # ------------------------------------------------------------------
+    # Webhook
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _send_webhook(config: dict, job_name: str, event: str, message: str) -> None:
+        url = config.get("url", "")
+        if not url:
+            raise ValueError("Webhook URL not configured")
+
+        payload = {
+            "source": "backup-buddy",
+            "event": event,
+            "job_name": job_name,
+            "message": message,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        headers = config.get("headers", {})
+        if isinstance(headers, str):
+            try:
+                headers = json.loads(headers)
+            except Exception:
+                headers = {}
+
+        resp = httpx.post(url, json=payload, headers=headers, timeout=10)
+        resp.raise_for_status()
+        logger.info("Webhook notification sent to %s", url)
+
+
+notification_service = NotificationService()

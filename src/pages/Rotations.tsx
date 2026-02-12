@@ -1,98 +1,106 @@
+import { useState } from "react";
 import { Plus, RotateCcw, Clock, Archive, Edit, Trash2, MoreVertical } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-
-const rotationPolicies = [
-  {
-    id: 1,
-    name: "Standard Daily",
-    description: "Keep daily backups for 7 days",
-    retention: "7 days",
-    minBackups: 7,
-    maxBackups: 14,
-    jobs: 8,
-    status: "active" as const,
-    lastCleanup: "Today, 00:15",
-    spaceReclaimed: "12.4 GB",
-  },
-  {
-    id: 2,
-    name: "Weekly Extended",
-    description: "Keep weekly backups for 12 weeks",
-    retention: "12 weeks",
-    minBackups: 12,
-    maxBackups: 24,
-    jobs: 4,
-    status: "active" as const,
-    lastCleanup: "Yesterday",
-    spaceReclaimed: "45.2 GB",
-  },
-  {
-    id: 3,
-    name: "Monthly Archive",
-    description: "Keep monthly backups for 1 year",
-    retention: "365 days",
-    minBackups: 12,
-    maxBackups: 24,
-    jobs: 3,
-    status: "active" as const,
-    lastCleanup: "Feb 1, 2024",
-    spaceReclaimed: "156 GB",
-  },
-  {
-    id: 4,
-    name: "Hourly Critical",
-    description: "Keep hourly backups for 24 hours",
-    retention: "24 hours",
-    minBackups: 24,
-    maxBackups: 48,
-    jobs: 2,
-    status: "active" as const,
-    lastCleanup: "1 hour ago",
-    spaceReclaimed: "2.1 GB",
-  },
-  {
-    id: 5,
-    name: "Compliance Archive",
-    description: "Regulatory compliance - 7 year retention",
-    retention: "7 years",
-    minBackups: 84,
-    maxBackups: 168,
-    jobs: 1,
-    status: "idle" as const,
-    lastCleanup: "Never",
-    spaceReclaimed: "-",
-  },
-];
+import { fetchRotations, createRotation, updateRotation, deleteRotation, runCleanup } from "@/api";
+import type { RetentionPolicy } from "@/api/types";
 
 export default function Rotations() {
+  const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [editing, setEditing] = useState<RetentionPolicy | null>(null);
+  const [form, setForm] = useState({ name: "", description: "", retention_days: 7, min_backups: 1, max_backups: 0 });
+
+  const { data: policies = [], isLoading } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["rotations"] });
+
+  const createMut = useMutation({
+    mutationFn: () => createRotation({ name: form.name, description: form.description || undefined, retention_days: form.retention_days, min_backups: form.min_backups, max_backups: form.max_backups || undefined }),
+    onSuccess: () => { toast.success(`Policy "${form.name}" created`); invalidate(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+  const updateMut = useMutation({
+    mutationFn: (id: number) => updateRotation(id, { name: form.name, description: form.description || undefined, retention_days: form.retention_days, min_backups: form.min_backups, max_backups: form.max_backups || undefined }),
+    onSuccess: () => { toast.success("Policy updated"); invalidate(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+  const deleteMut = useMutation({
+    mutationFn: deleteRotation,
+    onSuccess: () => { toast.success("Policy deleted"); invalidate(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+  const cleanupMut = useMutation({
+    mutationFn: runCleanup,
+    onSuccess: (r) => toast.success(r.message),
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ name: "", description: "", retention_days: 7, min_backups: 1, max_backups: 0 });
+    setDialogOpen(true);
+  };
+  const openEdit = (p: RetentionPolicy) => {
+    setEditing(p);
+    setForm({ name: p.name, description: p.description || "", retention_days: p.retention_days, min_backups: p.min_backups, max_backups: p.max_backups || 0 });
+    setDialogOpen(true);
+  };
+  const handleSave = () => {
+    if (!form.name || form.retention_days < 1) return;
+    if (editing) updateMut.mutate(editing.id);
+    else createMut.mutate();
+    setDialogOpen(false);
+    setEditing(null);
+  };
+
   return (
     <div>
-      <PageHeader 
-        title="Retention Policies" 
+      <PageHeader
+        title="Retention Policies"
         description="Configure backup rotation and retention rules"
         action={
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Policy
-          </Button>
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditing(null); }}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" onClick={openCreate}><Plus className="h-4 w-4" />New Policy</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>{editing ? "Edit Policy" : "Create Retention Policy"}</DialogTitle>
+                <DialogDescription>Define how long backups are kept and rotation limits.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2"><Label>Name</Label><Input className="bg-background border-border" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Description</Label><Input className="bg-background border-border" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} /></div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2"><Label>Retention (days)</Label><Input type="number" min={1} className="bg-background border-border" value={form.retention_days} onChange={(e) => setForm((p) => ({ ...p, retention_days: Number(e.target.value) }))} /></div>
+                  <div className="space-y-2"><Label>Min Backups</Label><Input type="number" min={0} className="bg-background border-border" value={form.min_backups} onChange={(e) => setForm((p) => ({ ...p, min_backups: Number(e.target.value) }))} /></div>
+                  <div className="space-y-2"><Label>Max Backups</Label><Input type="number" min={0} className="bg-background border-border" placeholder="0 = unlimited" value={form.max_backups || ""} onChange={(e) => setForm((p) => ({ ...p, max_backups: Number(e.target.value) }))} /></div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleSave}>{editing ? "Save Changes" : "Create Policy"}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         }
       />
 
@@ -100,12 +108,10 @@ export default function Rotations() {
         <Card className="glass-panel border-border animate-fade-in">
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Archive className="h-6 w-6 text-primary" />
-              </div>
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center"><Archive className="h-6 w-6 text-primary" /></div>
               <div>
-                <p className="text-2xl font-semibold">215.7 GB</p>
-                <p className="text-sm text-muted-foreground">Total Space Reclaimed</p>
+                <p className="text-2xl font-semibold">{policies.length}</p>
+                <p className="text-sm text-muted-foreground">Total Policies</p>
               </div>
             </div>
           </CardContent>
@@ -113,12 +119,10 @@ export default function Rotations() {
         <Card className="glass-panel border-border animate-fade-in">
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-success/10 flex items-center justify-center">
-                <RotateCcw className="h-6 w-6 text-success" />
-              </div>
+              <div className="h-12 w-12 rounded-lg bg-success/10 flex items-center justify-center"><RotateCcw className="h-6 w-6 text-success" /></div>
               <div>
-                <p className="text-2xl font-semibold">1,247</p>
-                <p className="text-sm text-muted-foreground">Backups Rotated (30d)</p>
+                <p className="text-2xl font-semibold">{policies.reduce((s, p) => s + p.job_count, 0)}</p>
+                <p className="text-sm text-muted-foreground">Connected Jobs</p>
               </div>
             </div>
           </CardContent>
@@ -126,77 +130,84 @@ export default function Rotations() {
         <Card className="glass-panel border-border animate-fade-in">
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-warning/10 flex items-center justify-center">
-                <Clock className="h-6 w-6 text-warning" />
-              </div>
+              <div className="h-12 w-12 rounded-lg bg-warning/10 flex items-center justify-center"><Clock className="h-6 w-6 text-warning" /></div>
               <div>
-                <p className="text-2xl font-semibold">5</p>
-                <p className="text-sm text-muted-foreground">Active Policies</p>
+                <p className="text-2xl font-semibold">{policies.filter((p) => p.max_backups).length}</p>
+                <p className="text-sm text-muted-foreground">With Max Cap</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="glass-panel border-border animate-fade-in">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="text-muted-foreground">Policy Name</TableHead>
-                <TableHead className="text-muted-foreground">Retention</TableHead>
-                <TableHead className="text-muted-foreground">Min / Max Backups</TableHead>
-                <TableHead className="text-muted-foreground">Jobs</TableHead>
-                <TableHead className="text-muted-foreground">Status</TableHead>
-                <TableHead className="text-muted-foreground">Last Cleanup</TableHead>
-                <TableHead className="text-muted-foreground">Space Reclaimed</TableHead>
-                <TableHead className="text-muted-foreground text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rotationPolicies.map((policy) => (
-                <TableRow key={policy.id} className="border-border hover:bg-muted/30">
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{policy.name}</p>
-                      <p className="text-xs text-muted-foreground">{policy.description}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">{policy.retention}</TableCell>
-                  <TableCell className="text-sm">
-                    {policy.minBackups} / {policy.maxBackups}
-                  </TableCell>
-                  <TableCell>{policy.jobs}</TableCell>
-                  <TableCell><StatusBadge status={policy.status} /></TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{policy.lastCleanup}</TableCell>
-                  <TableCell className="font-mono text-sm">{policy.spaceReclaimed}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-popover border-border">
-                        <DropdownMenuItem className="gap-2 cursor-pointer">
-                          <RotateCcw className="h-4 w-4" /> Run Cleanup
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer">
-                          <Edit className="h-4 w-4" /> Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator className="bg-border" />
-                        <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive">
-                          <Trash2 className="h-4 w-4" /> Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+      {isLoading ? (
+        <div className="text-center text-muted-foreground py-12">Loading policies...</div>
+      ) : policies.length === 0 ? (
+        <div className="text-center text-muted-foreground py-12">No retention policies yet.</div>
+      ) : (
+        <Card className="glass-panel border-border animate-fade-in">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="text-muted-foreground">Policy Name</TableHead>
+                  <TableHead className="text-muted-foreground">Retention</TableHead>
+                  <TableHead className="text-muted-foreground">Min / Max Backups</TableHead>
+                  <TableHead className="text-muted-foreground">Jobs</TableHead>
+                  <TableHead className="text-muted-foreground text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {policies.map((policy) => (
+                  <TableRow key={policy.id} className="border-border hover:bg-muted/30">
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{policy.name}</p>
+                        <p className="text-xs text-muted-foreground">{policy.description || "—"}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">{policy.retention_days} days</TableCell>
+                    <TableCell className="text-sm">{policy.min_backups} / {policy.max_backups || "∞"}</TableCell>
+                    <TableCell>{policy.job_count}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-popover border-border">
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => cleanupMut.mutate(policy.id)}>
+                            <RotateCcw className="h-4 w-4" /> Run Cleanup
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => openEdit(policy)}>
+                            <Edit className="h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="bg-border" />
+                          <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeleteId(policy.id)}>
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Retention Policy</AlertDialogTitle>
+            <AlertDialogDescription>Jobs using this policy will no longer have automatic rotation.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (deleteId) { deleteMut.mutate(deleteId); setDeleteId(null); } }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

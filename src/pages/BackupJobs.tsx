@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Plus, MoreVertical, Play, Pause, Trash2, Edit, Database } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -22,79 +23,103 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-
-type Job = {
-  id: number; name: string; label: string; containers: string; storage: string;
-  schedule: string; rotation: string; status: "active" | "running" | "error" | "idle"; lastRun: string; nextRun: string;
-};
-
-const initialJobs: Job[] = [
-  { id: 1, name: "postgres-data", label: "Backup=postgres-data", containers: "postgres-main, postgres-replica", storage: "S3", schedule: "Daily @ 23:00", rotation: "Keep 7 days", status: "active", lastRun: "2 hours ago", nextRun: "In 22 hours" },
-  { id: 2, name: "redis-cache", label: "Backup=redis-cache", containers: "redis-primary", storage: "Local FS", schedule: "Hourly", rotation: "Keep 24 hours", status: "running", lastRun: "Running now", nextRun: "-" },
-  { id: 3, name: "mysql-production", label: "Backup=mysql-production", containers: "mysql-db, mysql-sidecar", storage: "S3", schedule: "Every 6 hours", rotation: "Keep 14 days", status: "error", lastRun: "3 hours ago (failed)", nextRun: "In 3 hours" },
-  { id: 4, name: "grafana-data", label: "Backup=grafana-data", containers: "grafana", storage: "Backblaze", schedule: "Daily @ 02:00", rotation: "Keep 30 days", status: "active", lastRun: "6 hours ago", nextRun: "In 18 hours" },
-  { id: 5, name: "nginx-configs", label: "Backup=nginx-configs", containers: "nginx-proxy, nginx-web", storage: "FTP", schedule: "Weekly", rotation: "Keep 12 weeks", status: "idle", lastRun: "3 days ago", nextRun: "In 4 days" },
-];
-
-const scheduleMap: Record<string, string> = { hourly: "Hourly", daily: "Daily", "6hours": "Every 6 hours", weekly: "Weekly" };
-const rotationMap: Record<string, string> = { "24h": "Keep 24 hours", "7d": "Keep 7 days", "14d": "Keep 14 days", "30d": "Keep 30 days", "12w": "Keep 12 weeks" };
-const storageMap: Record<string, string> = { localfs: "Local FS", s3: "S3", backblaze: "Backblaze", ftp: "FTP" };
+import { fetchJobs, createJob, updateJob, deleteJob, runJob, pauseJob, resumeJob, fetchStorages, fetchSchedules, fetchRotations } from "@/api";
+import type { BackupJob } from "@/api/types";
 
 export default function BackupJobs() {
-  const [jobs, setJobs] = useState<Job[]>(initialJobs);
+  const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [editingJob, setEditingJob] = useState<Job | null>(null);
-  const [formData, setFormData] = useState({ name: "", storage: "", schedule: "", rotation: "" });
+  const [editingJob, setEditingJob] = useState<BackupJob | null>(null);
+  const [formData, setFormData] = useState({ name: "", storage_id: "", schedule_id: "", retention_id: "" });
 
-  const storageReverseMap: Record<string, string> = Object.fromEntries(Object.entries(storageMap).map(([k, v]) => [v, k]));
-  const scheduleReverseMap: Record<string, string> = Object.fromEntries(Object.entries(scheduleMap).map(([k, v]) => [v, k]));
-  const rotationReverseMap: Record<string, string> = Object.fromEntries(Object.entries(rotationMap).map(([k, v]) => [v, k]));
+  const { data: jobs = [], isLoading } = useQuery({ queryKey: ["jobs"], queryFn: fetchJobs });
+  const { data: storages = [] } = useQuery({ queryKey: ["storages"], queryFn: fetchStorages });
+  const { data: schedules = [] } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
+  const { data: rotations = [] } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  };
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof formData) => createJob({
+      name: data.name,
+      storage_id: Number(data.storage_id),
+      schedule_id: data.schedule_id ? Number(data.schedule_id) : null,
+      retention_id: data.retention_id ? Number(data.retention_id) : null,
+    }),
+    onSuccess: (_, data) => { toast.success(`Job "${data.name}" created`); invalidate(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: typeof formData }) => updateJob(id, {
+      name: data.name,
+      storage_id: Number(data.storage_id),
+      schedule_id: data.schedule_id ? Number(data.schedule_id) : null,
+      retention_id: data.retention_id ? Number(data.retention_id) : null,
+    }),
+    onSuccess: (_, { data }) => { toast.success(`Job "${data.name}" updated`); invalidate(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteJob,
+    onSuccess: () => { toast.success("Job deleted"); invalidate(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const runMutation = useMutation({
+    mutationFn: runJob,
+    onSuccess: (res) => { toast.success(res.message); invalidate(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const pauseMutation = useMutation({
+    mutationFn: pauseJob,
+    onSuccess: (res) => { toast.success(res.message); invalidate(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: resumeJob,
+    onSuccess: (res) => { toast.success(res.message); invalidate(); },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   const openCreate = () => {
     setEditingJob(null);
-    setFormData({ name: "", storage: "", schedule: "", rotation: "" });
+    setFormData({ name: "", storage_id: "", schedule_id: "", retention_id: "" });
     setDialogOpen(true);
   };
 
-  const openEdit = (job: Job) => {
+  const openEdit = (job: BackupJob) => {
     setEditingJob(job);
     setFormData({
       name: job.name,
-      storage: storageReverseMap[job.storage] || "",
-      schedule: scheduleReverseMap[job.schedule] || "",
-      rotation: rotationReverseMap[job.rotation] || "",
+      storage_id: job.storage?.id?.toString() || "",
+      schedule_id: job.schedule?.id?.toString() || "",
+      retention_id: job.retention?.id?.toString() || "",
     });
     setDialogOpen(true);
   };
 
   const handleSave = () => {
-    if (!formData.name || !formData.storage || !formData.schedule || !formData.rotation) return;
+    if (!formData.name || !formData.storage_id) return;
     if (editingJob) {
-      setJobs((prev) => prev.map((j) => j.id === editingJob.id ? {
-        ...j, name: formData.name, label: `Backup=${formData.name}`,
-        storage: storageMap[formData.storage], schedule: scheduleMap[formData.schedule],
-        rotation: rotationMap[formData.rotation],
-      } : j));
-      toast.success(`Job "${formData.name}" updated`);
+      updateMutation.mutate({ id: editingJob.id, data: formData });
     } else {
-      setJobs((prev) => [...prev, {
-        id: Date.now(), name: formData.name, label: `Backup=${formData.name}`, containers: "—",
-        storage: storageMap[formData.storage], schedule: scheduleMap[formData.schedule],
-        rotation: rotationMap[formData.rotation], status: "idle", lastRun: "Never", nextRun: "Pending",
-      }]);
-      toast.success(`Job "${formData.name}" created`);
+      createMutation.mutate(formData);
     }
-    setFormData({ name: "", storage: "", schedule: "", rotation: "" });
-    setEditingJob(null);
     setDialogOpen(false);
+    setEditingJob(null);
   };
 
   const handleDelete = (id: number) => {
-    const job = jobs.find((j) => j.id === id);
-    setJobs((prev) => prev.filter((j) => j.id !== id));
+    deleteMutation.mutate(id);
     setDeleteId(null);
-    if (job) toast.success(`Job "${job.name}" deleted`);
   };
 
   return (
@@ -116,36 +141,38 @@ export default function BackupJobs() {
                 <div className="space-y-2">
                   <Label htmlFor="job-name">Job Name</Label>
                   <Input id="job-name" placeholder="e.g. postgres-data" className="bg-background border-border" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
-                  <p className="text-xs text-muted-foreground">Containers with label <code className="text-foreground">Backup={formData.name || "job-name"}</code> will be matched</p>
+                  <p className="text-xs text-muted-foreground">Containers with label <code className="text-foreground">backup-buddy.job={formData.name || "job-name"}</code> will be matched</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Storage Backend</Label>
-                  <Select value={formData.storage} onValueChange={(v) => setFormData((p) => ({ ...p, storage: v }))}>
+                  <Select value={formData.storage_id} onValueChange={(v) => setFormData((p) => ({ ...p, storage_id: v }))}>
                     <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select storage" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
-                      <SelectItem value="localfs">Local FS</SelectItem><SelectItem value="s3">S3</SelectItem>
-                      <SelectItem value="backblaze">Backblaze</SelectItem><SelectItem value="ftp">FTP</SelectItem>
+                      {storages.map((s) => (
+                        <SelectItem key={s.id} value={s.id.toString()}>{s.name} ({s.type})</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Schedule</Label>
-                  <Select value={formData.schedule} onValueChange={(v) => setFormData((p) => ({ ...p, schedule: v }))}>
-                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select schedule" /></SelectTrigger>
+                  <Select value={formData.schedule_id} onValueChange={(v) => setFormData((p) => ({ ...p, schedule_id: v }))}>
+                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select schedule (optional)" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
-                      <SelectItem value="hourly">Hourly</SelectItem><SelectItem value="daily">Daily</SelectItem>
-                      <SelectItem value="6hours">Every 6 hours</SelectItem><SelectItem value="weekly">Weekly</SelectItem>
+                      {schedules.map((s) => (
+                        <SelectItem key={s.id} value={s.id.toString()}>{s.name} ({s.cron})</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Rotation Policy</Label>
-                  <Select value={formData.rotation} onValueChange={(v) => setFormData((p) => ({ ...p, rotation: v }))}>
-                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select rotation" /></SelectTrigger>
+                  <Label>Retention Policy</Label>
+                  <Select value={formData.retention_id} onValueChange={(v) => setFormData((p) => ({ ...p, retention_id: v }))}>
+                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select policy (optional)" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
-                      <SelectItem value="24h">Keep 24 hours</SelectItem><SelectItem value="7d">Keep 7 days</SelectItem>
-                      <SelectItem value="14d">Keep 14 days</SelectItem><SelectItem value="30d">Keep 30 days</SelectItem>
-                      <SelectItem value="12w">Keep 12 weeks</SelectItem>
+                      {rotations.map((r) => (
+                        <SelectItem key={r.id} value={r.id.toString()}>{r.name} ({r.retention_days}d)</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -161,56 +188,72 @@ export default function BackupJobs() {
 
       <Card className="glass-panel border-border animate-fade-in">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="text-muted-foreground">Job Name</TableHead>
-                <TableHead className="text-muted-foreground">Docker Label</TableHead>
-                <TableHead className="text-muted-foreground">Matched Containers</TableHead>
-                <TableHead className="text-muted-foreground">Storage</TableHead>
-                <TableHead className="text-muted-foreground">Schedule</TableHead>
-                <TableHead className="text-muted-foreground">Status</TableHead>
-                <TableHead className="text-muted-foreground">Last Run</TableHead>
-                <TableHead className="text-muted-foreground text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {jobs.map((job) => (
-                <TableRow key={job.id} className="border-border hover:bg-muted/30">
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
-                        <Database className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <span className="font-medium">{job.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm text-muted-foreground">{job.label}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground max-w-48 truncate">{job.containers}</TableCell>
-                  <TableCell>{job.storage}</TableCell>
-                  <TableCell className="text-sm">{job.schedule}</TableCell>
-                  <TableCell><StatusBadge status={job.status} /></TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{job.lastRun}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-popover border-border">
-                        <DropdownMenuItem className="gap-2 cursor-pointer"><Play className="h-4 w-4" /> Run Now</DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer"><Pause className="h-4 w-4" /> Pause Job</DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => openEdit(job)}><Edit className="h-4 w-4" /> Edit</DropdownMenuItem>
-                        <DropdownMenuSeparator className="bg-border" />
-                        <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeleteId(job.id)}>
-                          <Trash2 className="h-4 w-4" /> Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+          {isLoading ? (
+            <div className="p-8 text-center text-muted-foreground">Loading jobs...</div>
+          ) : jobs.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">No backup jobs yet. Create one to get started.</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="text-muted-foreground">Job Name</TableHead>
+                  <TableHead className="text-muted-foreground">Docker Label</TableHead>
+                  <TableHead className="text-muted-foreground">Matched Containers</TableHead>
+                  <TableHead className="text-muted-foreground">Storage</TableHead>
+                  <TableHead className="text-muted-foreground">Schedule</TableHead>
+                  <TableHead className="text-muted-foreground">Status</TableHead>
+                  <TableHead className="text-muted-foreground">Last Run</TableHead>
+                  <TableHead className="text-muted-foreground text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {jobs.map((job) => (
+                  <TableRow key={job.id} className="border-border hover:bg-muted/30">
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
+                          <Database className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <span className="font-medium">{job.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm text-muted-foreground">{job.label}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-48 truncate">
+                      {job.containers.length > 0 ? job.containers.join(", ") : "—"}
+                    </TableCell>
+                    <TableCell>{job.storage?.name || "—"}</TableCell>
+                    <TableCell className="text-sm">{job.schedule ? `${job.schedule.name} (${job.schedule.cron})` : "Manual"}</TableCell>
+                    <TableCell><StatusBadge status={job.status} /></TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {job.last_run ? new Date(job.last_run).toLocaleString() : "Never"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-popover border-border">
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => runMutation.mutate(job.id)}>
+                            <Play className="h-4 w-4" /> Run Now
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => job.enabled ? pauseMutation.mutate(job.id) : resumeMutation.mutate(job.id)}>
+                            <Pause className="h-4 w-4" /> {job.enabled ? "Pause Job" : "Resume Job"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => openEdit(job)}>
+                            <Edit className="h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="bg-border" />
+                          <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeleteId(job.id)}>
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 

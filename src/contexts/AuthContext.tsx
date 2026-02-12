@@ -1,30 +1,32 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode } from "react";
+import { login as apiLogin, logout as apiLogout, setToken } from "@/api";
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: (password: string) => boolean;
+  login: (password: string) => Promise<boolean>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
-
-const DEFAULT_PASSWORD = "admin";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return sessionStorage.getItem("dvbm_auth") === "true";
   });
 
-  const login = (password: string) => {
-    if (password === DEFAULT_PASSWORD) {
+  const login = async (password: string): Promise<boolean> => {
+    try {
+      await apiLogin(password);
       setIsAuthenticated(true);
       sessionStorage.setItem("dvbm_auth", "true");
       return true;
+    } catch {
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
+    apiLogout();
     setIsAuthenticated(false);
     sessionStorage.removeItem("dvbm_auth");
   };

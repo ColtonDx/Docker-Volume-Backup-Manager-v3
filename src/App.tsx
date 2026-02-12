@@ -14,6 +14,7 @@ import Notifications from "./pages/Notifications";
 import Storages from "./pages/Storages";
 import Rotations from "./pages/Rotations";
 import Logs from "./pages/Logs";
+import Restore from "./pages/Restore";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +37,7 @@ function AppRoutes() {
         <Route path="/storages" element={<Storages />} />
         <Route path="/rotations" element={<Rotations />} />
         <Route path="/logs" element={<Logs />} />
+        <Route path="/restore" element={<Restore />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

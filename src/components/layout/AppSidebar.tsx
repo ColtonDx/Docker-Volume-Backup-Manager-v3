@@ -8,7 +8,8 @@ import {
   Settings,
   Container,
   LayoutDashboard,
-  LogOut
+  LogOut,
+  ArchiveRestore
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { NavLink } from "@/components/NavLink";
@@ -39,6 +40,7 @@ const configNavItems = [
 
 const systemNavItems = [
   { title: "Logs", url: "/logs", icon: FileText },
+  { title: "Restore", url: "/restore", icon: ArchiveRestore },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

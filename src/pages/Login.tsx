@@ -10,10 +10,14 @@ export default function Login() {
   const { login } = useAuth();
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!login(password)) {
+    setLoading(true);
+    const ok = await login(password);
+    setLoading(false);
+    if (!ok) {
       setError(true);
       setPassword("");
     }
@@ -49,11 +53,13 @@ export default function Login() {
                 <p className="text-sm text-destructive">Invalid password. Try again.</p>
               )}
             </div>
-            <Button type="submit" className="w-full">
-              Sign In
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
             </Button>
             <p className="text-xs text-center text-muted-foreground">
               Default password: <code className="text-foreground">admin</code>
+              <br />
+              <span className="text-xs">(set via BACKUP_BUDDY_PASSWORD env var)</span>
             </p>
           </form>
         </CardContent>
