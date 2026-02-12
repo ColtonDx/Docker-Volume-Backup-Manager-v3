@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -48,17 +49,46 @@ def get_dashboard(db: Session = Depends(get_db)):
         .all()
     )
 
-    # Upcoming schedules
+    # Upcoming schedules — include next run time and linked job names
     schedules = db.query(Schedule).filter(Schedule.enabled == True).all()
-    upcoming = [
-        {
+    now = datetime.now(timezone.utc)
+    upcoming = []
+    for s in schedules:
+        # Compute next_run from cron expression
+        next_run = None
+        try:
+            parts = s.cron.strip().split()
+            if len(parts) == 5:
+                trigger = CronTrigger(
+                    minute=parts[0], hour=parts[1], day=parts[2],
+                    month=parts[3], day_of_week=parts[4],
+                )
+                next_fire = trigger.get_next_fire_time(None, now)
+                if next_fire:
+                    next_run = next_fire.isoformat()
+        except Exception:
+            pass
+
+        # Find jobs linked to this schedule
+        linked_jobs = (
+            db.query(BackupJob)
+            .filter(BackupJob.schedule_id == s.id, BackupJob.enabled == True)
+            .all()
+        )
+        job_names = [j.name for j in linked_jobs]
+
+        upcoming.append({
             "id": s.id,
             "name": s.name,
             "cron": s.cron,
             "description": s.description,
-        }
-        for s in schedules[:5]
-    ]
+            "next_run": next_run,
+            "job_names": job_names,
+        })
+
+    # Sort by next_run (soonest first), entries with no next_run go last
+    upcoming.sort(key=lambda x: x["next_run"] or "9999")
+    upcoming = upcoming[:5]
 
     return DashboardStats(
         total_jobs=total_jobs,

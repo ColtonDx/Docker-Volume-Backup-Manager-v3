@@ -214,6 +214,8 @@ export interface DashboardStats {
     name: string;
     cron: string;
     description: string | null;
+    next_run: string | null;
+    job_names: string[];
   }>;
   storage_usage: Array<{
     name: string;

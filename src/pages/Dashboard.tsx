@@ -151,11 +151,19 @@ export default function Dashboard() {
                   <div key={schedule.id} className="p-4 hover:bg-muted/50 transition-colors">
                     <div className="flex items-center justify-between mb-1">
                       <p className="font-medium text-sm">{schedule.name}</p>
-                      <code className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground">
-                        {schedule.cron}
-                      </code>
+                      <span className="text-xs text-muted-foreground">
+                        {schedule.next_run
+                          ? new Date(schedule.next_run).toLocaleString()
+                          : "—"}
+                      </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">{schedule.description || "—"}</p>
+                    {schedule.job_names.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Jobs: {schedule.job_names.join(", ")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No jobs linked</p>
+                    )}
                   </div>
                 ))
               )}

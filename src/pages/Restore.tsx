@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { RotateCcw, Search, RefreshCw, CheckCircle, Clock, Database, CalendarIcon, X } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { RotateCcw, Search, RefreshCw, CheckCircle, Clock, Database, CalendarIcon, X, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -64,6 +64,19 @@ export default function Restore() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [restoreId, setRestoreId] = useState<number | null>(null);
+
+  // Sorting
+  type SortKey = "id" | "job_name" | "status" | "size_bytes" | "duration_seconds" | "volumes" | "started_at";
+  const [sortKey, setSortKey] = useState<SortKey>("started_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const toggleSort = useCallback((key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "started_at" || key === "id" ? "desc" : "asc");
+    }
+  }, [sortKey]);
 
   // Only fetch restorable backups (success + warning)
   const { data: successBackups = [], isLoading: loadingSuccess, refetch: refetchSuccess } = useQuery({
@@ -131,6 +144,30 @@ export default function Restore() {
 
   const hasActiveFilters = search || jobFilter !== "all" || volumeFilter || dateFrom || dateTo;
   const clearFilters = () => { setSearch(""); setJobFilter("all"); setVolumeFilter(""); setDateFrom(""); setDateTo(""); };
+
+  // Apply sorting to filtered results
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "id": cmp = a.id - b.id; break;
+        case "job_name": cmp = a.job_name.localeCompare(b.job_name); break;
+        case "status": cmp = a.status.localeCompare(b.status); break;
+        case "size_bytes": cmp = (a.size_bytes ?? 0) - (b.size_bytes ?? 0); break;
+        case "duration_seconds": cmp = (a.duration_seconds ?? 0) - (b.duration_seconds ?? 0); break;
+        case "volumes": cmp = a.volumes_backed_up.join(",").localeCompare(b.volumes_backed_up.join(",")); break;
+        case "started_at": cmp = new Date(a.started_at).getTime() - new Date(b.started_at).getTime(); break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
 
   return (
     <div>
@@ -260,18 +297,18 @@ export default function Restore() {
             <Table>
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
-                  <TableHead className="text-muted-foreground">ID</TableHead>
-                  <TableHead className="text-muted-foreground">Job</TableHead>
-                  <TableHead className="text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-muted-foreground">Size</TableHead>
-                  <TableHead className="text-muted-foreground">Duration</TableHead>
-                  <TableHead className="text-muted-foreground">Volumes</TableHead>
-                  <TableHead className="text-muted-foreground">Date</TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("id")}><div className="flex items-center">ID<SortIcon col="id" /></div></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("job_name")}><div className="flex items-center">Job<SortIcon col="job_name" /></div></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("status")}><div className="flex items-center">Status<SortIcon col="status" /></div></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("size_bytes")}><div className="flex items-center">Size<SortIcon col="size_bytes" /></div></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("duration_seconds")}><div className="flex items-center">Duration<SortIcon col="duration_seconds" /></div></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("volumes")}><div className="flex items-center">Volumes<SortIcon col="volumes" /></div></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("started_at")}><div className="flex items-center">Date<SortIcon col="started_at" /></div></TableHead>
                   <TableHead className="text-muted-foreground text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((backup) => (
+                {sorted.map((backup) => (
                   <TableRow key={backup.id} className="border-border hover:bg-muted/30">
                     <TableCell className="font-mono text-sm">#{backup.id}</TableCell>
                     <TableCell>
