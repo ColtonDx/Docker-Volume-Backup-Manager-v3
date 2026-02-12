@@ -1,33 +1,67 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-export type ColorTheme = "cyan" | "purple" | "red" | "green";
+/**
+ * Theme ID format: "<family>-<variant>"
+ * This keeps the door open for entirely new theme families
+ * (e.g. "minimal-blue", "neon-pink") later.
+ */
+export type ThemeId = "default-blue" | "default-purple" | "default-red" | "default-green";
+
+export interface ThemeOption {
+  id: ThemeId;
+  label: string;
+  /** Tailwind-safe swatch colour for the picker */
+  swatch: string;
+  /** Preview dark-mode bg colour for the picker card */
+  previewBg: string;
+}
+
+export const THEMES: ThemeOption[] = [
+  { id: "default-blue",   label: "Default - Blue",   swatch: "bg-[hsl(192,91%,36%)]",  previewBg: "bg-[hsl(222,47%,6%)]" },
+  { id: "default-purple", label: "Default - Purple", swatch: "bg-[hsl(270,65%,50%)]",  previewBg: "bg-[hsl(270,40%,6%)]" },
+  { id: "default-red",    label: "Default - Red",    swatch: "bg-[hsl(0,72%,51%)]",    previewBg: "bg-[hsl(0,35%,6%)]" },
+  { id: "default-green",  label: "Default - Green",  swatch: "bg-[hsl(152,69%,36%)]",  previewBg: "bg-[hsl(152,35%,5%)]" },
+];
+
+const VALID_IDS = THEMES.map((t) => t.id) as string[];
 
 interface ColorThemeContextValue {
-  colorTheme: ColorTheme;
-  setColorTheme: (theme: ColorTheme) => void;
+  colorTheme: ThemeId;
+  setColorTheme: (theme: ThemeId) => void;
 }
 
 const ColorThemeContext = createContext<ColorThemeContextValue>({
-  colorTheme: "cyan",
+  colorTheme: "default-blue",
   setColorTheme: () => {},
 });
 
 const STORAGE_KEY = "backup-buddy-color-theme";
 
+/** Migrate legacy values stored before the rename */
+function migrateLegacy(raw: string | null): ThemeId | null {
+  if (!raw) return null;
+  const map: Record<string, ThemeId> = {
+    cyan: "default-blue",
+    purple: "default-purple",
+    red: "default-red",
+    green: "default-green",
+  };
+  if (map[raw]) return map[raw];
+  if (VALID_IDS.includes(raw)) return raw as ThemeId;
+  return null;
+}
+
 export function ColorThemeProvider({ children }: { children: ReactNode }) {
-  const [colorTheme, setColorThemeState] = useState<ColorTheme>(() => {
+  const [colorTheme, setColorThemeState] = useState<ThemeId>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved && ["cyan", "purple", "red", "green"].includes(saved)) {
-        return saved as ColorTheme;
-      }
+      return migrateLegacy(localStorage.getItem(STORAGE_KEY)) ?? "default-blue";
     } catch {}
-    return "cyan";
+    return "default-blue";
   });
 
   useEffect(() => {
     const root = document.documentElement;
-    if (colorTheme === "cyan") {
+    if (colorTheme === "default-blue") {
       root.removeAttribute("data-theme");
     } else {
       root.setAttribute("data-theme", colorTheme);

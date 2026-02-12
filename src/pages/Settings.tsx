@@ -17,7 +17,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { fetchSettings, updateSettings, resetSettings, clearLogs } from "@/api";
-import { useColorTheme, type ColorTheme } from "@/contexts/ColorThemeContext";
+import { useColorTheme, THEMES, type ThemeId } from "@/contexts/ColorThemeContext";
 
 export default function Settings() {
   const queryClient = useQueryClient();
@@ -78,12 +78,7 @@ export default function Settings() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {([
-                { id: "cyan" as ColorTheme, label: "Cyan", swatch: "bg-[hsl(192,91%,36%)]" },
-                { id: "purple" as ColorTheme, label: "Purple", swatch: "bg-[hsl(270,65%,50%)]" },
-                { id: "red" as ColorTheme, label: "Red", swatch: "bg-[hsl(0,72%,51%)]" },
-                { id: "green" as ColorTheme, label: "Green", swatch: "bg-[hsl(152,69%,36%)]" },
-              ]).map((t) => (
+              {THEMES.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setColorTheme(t.id)}
@@ -93,8 +88,11 @@ export default function Settings() {
                       : "border-border bg-card"
                   }`}
                 >
-                  <div className={`h-10 w-10 rounded-full ${t.swatch} shadow-md`} />
-                  <span className="text-sm font-medium">{t.label}</span>
+                  {/* Mini preview: dark bg circle with accent dot */}
+                  <div className={`h-12 w-12 rounded-full ${t.previewBg} flex items-center justify-center shadow-md`}>
+                    <div className={`h-5 w-5 rounded-full ${t.swatch}`} />
+                  </div>
+                  <span className="text-sm font-medium text-center leading-tight">{t.label}</span>
                   {colorTheme === t.id && (
                     <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
                       <Check className="h-3 w-3 text-primary-foreground" />
@@ -121,13 +119,48 @@ export default function Settings() {
               </div>
               <div className="space-y-2">
                 <Label>Default Timezone</Label>
-                <Select value={(form.timezone as string) || "utc"} onValueChange={(v) => set("timezone", v)}>
+                <Select value={(form.timezone as string) || "UTC"} onValueChange={(v) => set("timezone", v)}>
                   <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    <SelectItem value="utc">UTC</SelectItem>
-                    <SelectItem value="est">Eastern Time (EST)</SelectItem>
-                    <SelectItem value="pst">Pacific Time (PST)</SelectItem>
-                    <SelectItem value="cet">Central European Time (CET)</SelectItem>
+                  <SelectContent className="bg-popover border-border max-h-64">
+                    <SelectItem value="UTC">UTC</SelectItem>
+                    <SelectItem value="US/Eastern">US / Eastern (ET)</SelectItem>
+                    <SelectItem value="US/Central">US / Central (CT)</SelectItem>
+                    <SelectItem value="US/Mountain">US / Mountain (MT)</SelectItem>
+                    <SelectItem value="US/Pacific">US / Pacific (PT)</SelectItem>
+                    <SelectItem value="US/Alaska">US / Alaska (AKT)</SelectItem>
+                    <SelectItem value="US/Hawaii">US / Hawaii (HST)</SelectItem>
+                    <SelectItem value="Canada/Atlantic">Canada / Atlantic (AT)</SelectItem>
+                    <SelectItem value="Canada/Newfoundland">Canada / Newfoundland (NT)</SelectItem>
+                    <SelectItem value="America/Mexico_City">America / Mexico City (CST)</SelectItem>
+                    <SelectItem value="America/Sao_Paulo">America / São Paulo (BRT)</SelectItem>
+                    <SelectItem value="America/Argentina/Buenos_Aires">America / Buenos Aires (ART)</SelectItem>
+                    <SelectItem value="Europe/London">Europe / London (GMT/BST)</SelectItem>
+                    <SelectItem value="Europe/Paris">Europe / Paris (CET)</SelectItem>
+                    <SelectItem value="Europe/Berlin">Europe / Berlin (CET)</SelectItem>
+                    <SelectItem value="Europe/Amsterdam">Europe / Amsterdam (CET)</SelectItem>
+                    <SelectItem value="Europe/Madrid">Europe / Madrid (CET)</SelectItem>
+                    <SelectItem value="Europe/Rome">Europe / Rome (CET)</SelectItem>
+                    <SelectItem value="Europe/Zurich">Europe / Zurich (CET)</SelectItem>
+                    <SelectItem value="Europe/Stockholm">Europe / Stockholm (CET)</SelectItem>
+                    <SelectItem value="Europe/Helsinki">Europe / Helsinki (EET)</SelectItem>
+                    <SelectItem value="Europe/Athens">Europe / Athens (EET)</SelectItem>
+                    <SelectItem value="Europe/Bucharest">Europe / Bucharest (EET)</SelectItem>
+                    <SelectItem value="Europe/Moscow">Europe / Moscow (MSK)</SelectItem>
+                    <SelectItem value="Europe/Istanbul">Europe / Istanbul (TRT)</SelectItem>
+                    <SelectItem value="Asia/Dubai">Asia / Dubai (GST)</SelectItem>
+                    <SelectItem value="Asia/Kolkata">Asia / Kolkata (IST)</SelectItem>
+                    <SelectItem value="Asia/Bangkok">Asia / Bangkok (ICT)</SelectItem>
+                    <SelectItem value="Asia/Singapore">Asia / Singapore (SGT)</SelectItem>
+                    <SelectItem value="Asia/Hong_Kong">Asia / Hong Kong (HKT)</SelectItem>
+                    <SelectItem value="Asia/Shanghai">Asia / Shanghai (CST)</SelectItem>
+                    <SelectItem value="Asia/Seoul">Asia / Seoul (KST)</SelectItem>
+                    <SelectItem value="Asia/Tokyo">Asia / Tokyo (JST)</SelectItem>
+                    <SelectItem value="Australia/Sydney">Australia / Sydney (AEST)</SelectItem>
+                    <SelectItem value="Australia/Melbourne">Australia / Melbourne (AEST)</SelectItem>
+                    <SelectItem value="Australia/Perth">Australia / Perth (AWST)</SelectItem>
+                    <SelectItem value="Australia/Adelaide">Australia / Adelaide (ACST)</SelectItem>
+                    <SelectItem value="Pacific/Auckland">Pacific / Auckland (NZST)</SelectItem>
+                    <SelectItem value="Pacific/Fiji">Pacific / Fiji (FJT)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

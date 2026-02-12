@@ -162,11 +162,12 @@
 }
 
 /* ================================================
-   COLOR THEMES — override primary/accent variables
+   THEMES — full color scheme overrides
+   Architecture: [data-theme="<family>-<variant>"]
    ================================================ */
 
-/* ---------- Purple ---------- */
-[data-theme="purple"] {
+/* ---------- Default - Purple ---------- */
+[data-theme="default-purple"] {
   --primary: 270 65% 50%;
   --accent: 270 65% 50%;
   --ring: 270 65% 50%;
@@ -174,18 +175,38 @@
   --sidebar-ring: 270 65% 50%;
   --chart-1: 270 65% 50%;
 }
-.dark[data-theme="purple"],
-[data-theme="purple"].dark {
+.dark[data-theme="default-purple"],
+[data-theme="default-purple"].dark {
+  --background: 270 40% 6%;
+  --foreground: 260 30% 98%;
+  --card: 270 40% 8%;
+  --card-foreground: 260 30% 98%;
+  --popover: 270 40% 10%;
+  --popover-foreground: 260 30% 98%;
   --primary: 270 65% 62%;
+  --primary-foreground: 270 40% 6%;
+  --secondary: 270 25% 17%;
+  --secondary-foreground: 260 30% 98%;
+  --muted: 270 25% 14%;
+  --muted-foreground: 270 15% 55%;
   --accent: 270 65% 62%;
+  --accent-foreground: 270 40% 6%;
+  --border: 270 25% 17%;
+  --input: 270 25% 17%;
   --ring: 270 65% 62%;
+  --sidebar-background: 270 40% 7%;
+  --sidebar-foreground: 270 15% 65%;
   --sidebar-primary: 270 65% 62%;
+  --sidebar-primary-foreground: 270 40% 6%;
+  --sidebar-accent: 270 25% 14%;
+  --sidebar-accent-foreground: 260 30% 98%;
+  --sidebar-border: 270 25% 17%;
   --sidebar-ring: 270 65% 62%;
   --chart-1: 270 65% 62%;
 }
 
-/* ---------- Red ---------- */
-[data-theme="red"] {
+/* ---------- Default - Red ---------- */
+[data-theme="default-red"] {
   --primary: 0 72% 51%;
   --accent: 0 72% 51%;
   --ring: 0 72% 51%;
@@ -193,18 +214,38 @@
   --sidebar-ring: 0 72% 51%;
   --chart-1: 0 72% 51%;
 }
-.dark[data-theme="red"],
-[data-theme="red"].dark {
+.dark[data-theme="default-red"],
+[data-theme="default-red"].dark {
+  --background: 0 35% 6%;
+  --foreground: 0 20% 98%;
+  --card: 0 35% 8%;
+  --card-foreground: 0 20% 98%;
+  --popover: 0 35% 10%;
+  --popover-foreground: 0 20% 98%;
   --primary: 0 72% 60%;
+  --primary-foreground: 0 35% 6%;
+  --secondary: 0 20% 17%;
+  --secondary-foreground: 0 20% 98%;
+  --muted: 0 20% 14%;
+  --muted-foreground: 0 12% 55%;
   --accent: 0 72% 60%;
+  --accent-foreground: 0 35% 6%;
+  --border: 0 20% 17%;
+  --input: 0 20% 17%;
   --ring: 0 72% 60%;
+  --sidebar-background: 0 35% 7%;
+  --sidebar-foreground: 0 12% 65%;
   --sidebar-primary: 0 72% 60%;
+  --sidebar-primary-foreground: 0 35% 6%;
+  --sidebar-accent: 0 20% 14%;
+  --sidebar-accent-foreground: 0 20% 98%;
+  --sidebar-border: 0 20% 17%;
   --sidebar-ring: 0 72% 60%;
   --chart-1: 0 72% 60%;
 }
 
-/* ---------- Green ---------- */
-[data-theme="green"] {
+/* ---------- Default - Green ---------- */
+[data-theme="default-green"] {
   --primary: 152 69% 36%;
   --accent: 152 69% 36%;
   --ring: 152 69% 36%;
@@ -212,12 +253,32 @@
   --sidebar-ring: 152 69% 36%;
   --chart-1: 152 69% 36%;
 }
-.dark[data-theme="green"],
-[data-theme="green"].dark {
+.dark[data-theme="default-green"],
+[data-theme="default-green"].dark {
+  --background: 152 35% 5%;
+  --foreground: 150 20% 98%;
+  --card: 152 35% 7%;
+  --card-foreground: 150 20% 98%;
+  --popover: 152 35% 9%;
+  --popover-foreground: 150 20% 98%;
   --primary: 152 69% 46%;
+  --primary-foreground: 152 35% 5%;
+  --secondary: 152 20% 16%;
+  --secondary-foreground: 150 20% 98%;
+  --muted: 152 20% 13%;
+  --muted-foreground: 152 12% 52%;
   --accent: 152 69% 46%;
+  --accent-foreground: 152 35% 5%;
+  --border: 152 20% 16%;
+  --input: 152 20% 16%;
   --ring: 152 69% 46%;
+  --sidebar-background: 152 35% 6%;
+  --sidebar-foreground: 152 12% 62%;
   --sidebar-primary: 152 69% 46%;
+  --sidebar-primary-foreground: 152 35% 5%;
+  --sidebar-accent: 152 20% 13%;
+  --sidebar-accent-foreground: 150 20% 98%;
+  --sidebar-border: 152 20% 16%;
   --sidebar-ring: 152 69% 46%;
   --chart-1: 152 69% 46%;
 }
