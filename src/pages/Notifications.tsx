@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Mail, MessageSquare, Webhook, Edit, Trash2, MoreVertical, TestTube } from "lucide-react";
+import { Plus, Mail, MessageSquare, Webhook, Edit, Trash2, MoreVertical, TestTube, MessageCircle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -24,7 +24,7 @@ import {
 import { fetchNotifications, createNotification, updateNotification, deleteNotification, testNotification } from "@/api";
 import type { NotificationChannel } from "@/api/types";
 
-const typeIcons: Record<string, typeof Mail> = { email: Mail, slack: MessageSquare, webhook: Webhook };
+const typeIcons: Record<string, typeof Mail> = { email: Mail, slack: MessageSquare, discord: MessageCircle, webhook: Webhook };
 const eventLabels: Record<string, { label: string; color: string }> = {
   failure: { label: "Failure", color: "bg-destructive/20 text-destructive" },
   warning: { label: "Warning", color: "bg-warning/20 text-warning" },
@@ -114,6 +114,7 @@ export default function Notifications() {
                     <SelectContent className="bg-popover border-border">
                       <SelectItem value="email">Email</SelectItem>
                       <SelectItem value="slack">Slack</SelectItem>
+                      <SelectItem value="discord">Discord</SelectItem>
                       <SelectItem value="webhook">Webhook</SelectItem>
                     </SelectContent>
                   </Select>
@@ -133,6 +134,18 @@ export default function Notifications() {
                     <Label>Webhook URL</Label>
                     <Input className="bg-background border-border font-mono text-sm" placeholder="https://hooks.slack.com/services/..." value={(form.config.webhook_url as string) || ""} onChange={(e) => setConfigField("webhook_url", e.target.value)} />
                   </div>
+                )}
+                {form.type === "discord" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Webhook URL</Label>
+                      <Input className="bg-background border-border font-mono text-sm" placeholder="https://discord.com/api/webhooks/..." value={(form.config.webhook_url as string) || ""} onChange={(e) => setConfigField("webhook_url", e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Bot Username (optional)</Label>
+                      <Input className="bg-background border-border" placeholder="Backup Buddy" value={(form.config.username as string) || ""} onChange={(e) => setConfigField("username", e.target.value)} />
+                    </div>
+                  </>
                 )}
                 {form.type === "webhook" && (
                   <>

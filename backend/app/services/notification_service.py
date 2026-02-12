@@ -74,6 +74,8 @@ class NotificationService:
             self._send_email(config, job_name, event, message)
         elif channel_type == "slack":
             self._send_slack(config, job_name, event, message)
+        elif channel_type == "discord":
+            self._send_discord(config, job_name, event, message)
         elif channel_type == "webhook":
             self._send_webhook(config, job_name, event, message)
         else:
@@ -136,6 +138,43 @@ class NotificationService:
         resp = httpx.post(webhook_url, json=payload, timeout=10)
         resp.raise_for_status()
         logger.info("Slack notification sent")
+
+    # ------------------------------------------------------------------
+    # Discord
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _send_discord(config: dict, job_name: str, event: str, message: str) -> None:
+        webhook_url = config.get("webhook_url", "")
+        if not webhook_url:
+            raise ValueError("Discord webhook URL not configured")
+
+        color_map = {"success": 0x22C55E, "failure": 0xEF4444, "warning": 0xF59E0B}
+        color = color_map.get(event, 0x3B82F6)
+
+        payload = {
+            "embeds": [
+                {
+                    "title": f"Backup Buddy \u2013 {event.upper()}",
+                    "description": message,
+                    "color": color,
+                    "fields": [
+                        {"name": "Job", "value": job_name, "inline": True},
+                        {"name": "Event", "value": event, "inline": True},
+                    ],
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ],
+            "username": config.get("username", "Backup Buddy"),
+        }
+
+        avatar_url = config.get("avatar_url")
+        if avatar_url:
+            payload["avatar_url"] = avatar_url
+
+        resp = httpx.post(webhook_url, json=payload, timeout=10)
+        resp.raise_for_status()
+        logger.info("Discord notification sent")
 
     # ------------------------------------------------------------------
     # Webhook
