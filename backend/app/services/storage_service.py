@@ -97,12 +97,18 @@ class StorageService:
         dest_dir = config.get("path", "/backups")
         os.makedirs(dest_dir, exist_ok=True)
         dest = os.path.join(dest_dir, remote_name)
-        shutil.copy2(local_path, dest)
-        logger.info("Local FS: copied %s -> %s", local_path, dest)
+        # Avoid error when source and destination resolve to the same file
+        if os.path.abspath(local_path) == os.path.abspath(dest):
+            logger.info("Local FS: file already at destination %s", dest)
+            return dest
+        shutil.move(local_path, dest)
+        logger.info("Local FS: moved %s -> %s", local_path, dest)
         return dest
 
     @staticmethod
     def _localfs_download(config: dict, remote_path: str, local_path: str) -> str:
+        if os.path.abspath(remote_path) == os.path.abspath(local_path):
+            return local_path
         shutil.copy2(remote_path, local_path)
         return local_path
 

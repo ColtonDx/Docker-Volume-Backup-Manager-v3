@@ -103,19 +103,28 @@ class BackupService:
                 f"Stopped {len(stopped)} container(s): {', '.join(container_names)}"
             )
 
-            # 4. Create tar.gz archive
+            # 4. Export volumes via helper containers and create tar.gz
             temp_dir = settings.BACKUP_TEMP_DIR
             temp_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             archive_name = f"{job.name}_{timestamp}.tar.gz"
             archive_path = temp_dir / archive_name
 
-            with tarfile.open(str(archive_path), "w:gz") as tar:
+            import tempfile
+            with tempfile.TemporaryDirectory(prefix="bb_") as work_dir:
                 for vol in all_volumes:
-                    vol_path = docker_service.get_volume_path(vol["name"])
-                    if vol_path and os.path.exists(vol_path):
-                        tar.add(vol_path, arcname=vol["name"])
-                        logger.info("Added volume %s from %s", vol["name"], vol_path)
+                    exported = docker_service.export_volume(vol["name"], work_dir)
+                    if exported:
+                        logger.info("Exported volume %s to staging dir", vol["name"])
+                    else:
+                        self._log(db, "warning", job.name, f"Could not export volume {vol['name']}")
+
+                with tarfile.open(str(archive_path), "w:gz") as tar:
+                    for vol in all_volumes:
+                        vol_dir = os.path.join(work_dir, vol["name"])
+                        if os.path.isdir(vol_dir):
+                            tar.add(vol_dir, arcname=vol["name"])
+                            logger.info("Added volume %s to archive", vol["name"])
 
             archive_size = archive_path.stat().st_size if archive_path.exists() else 0
 
@@ -145,9 +154,10 @@ class BackupService:
             record.volumes_backed_up = json.dumps(list(volume_names_set))
             db.commit()
 
-            # Clean up temp file
+            # Clean up temp file (may already be gone if localfs moved it)
             try:
-                archive_path.unlink(missing_ok=True)
+                if archive_path.exists():
+                    archive_path.unlink(missing_ok=True)
             except Exception:
                 pass
 
@@ -242,29 +252,25 @@ class BackupService:
             running_ids = [c["id"] for c in containers if c["status"] == "running"]
             stopped = docker_service.stop_containers(running_ids)
 
-            # 3. Extract archive to volumes
-            with tarfile.open(str(local_archive), "r:gz") as tar:
+            # 3. Extract archive and import into volumes via helper containers
+            import tempfile
+            with tempfile.TemporaryDirectory(prefix="bb_restore_") as work_dir:
+                with tarfile.open(str(local_archive), "r:gz") as tar:
+                    tar.extractall(path=work_dir)
+
                 # Each top-level dir in the archive is a volume name
-                members = tar.getmembers()
-                volume_names = set()
-                for m in members:
-                    parts = m.name.split("/")
-                    if parts:
-                        volume_names.add(parts[0])
+                volume_names = [
+                    d for d in os.listdir(work_dir)
+                    if os.path.isdir(os.path.join(work_dir, d))
+                ]
 
                 for vol_name in volume_names:
-                    vol_path = docker_service.get_volume_path(vol_name)
-                    if vol_path:
-                        # Clear existing data and extract
-                        vol_dir = Path(vol_path)
-                        if vol_dir.exists():
-                            shutil.rmtree(str(vol_dir))
-                        vol_dir.mkdir(parents=True, exist_ok=True)
-
-                        # Extract members belonging to this volume
-                        vol_members = [m for m in members if m.name.startswith(vol_name + "/") or m.name == vol_name]
-                        tar.extractall(path=str(vol_dir.parent), members=vol_members)
-                        logger.info("Restored volume %s to %s", vol_name, vol_path)
+                    vol_dir = os.path.join(work_dir, vol_name)
+                    ok = docker_service.import_volume(vol_name, vol_dir)
+                    if ok:
+                        logger.info("Restored volume %s", vol_name)
+                    else:
+                        logger.warning("Failed to restore volume %s", vol_name)
 
             # 4. Restart containers
             docker_service.start_containers(stopped)

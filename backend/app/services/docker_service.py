@@ -5,11 +5,15 @@ Communicates with the Docker daemon via the Docker SDK to:
  - Find containers matching a backup-buddy label
  - Stop and restart containers
  - List volumes for containers
+ - Export / import volume data via temporary helper containers
 """
 
 from __future__ import annotations
 
+import io
 import logging
+import os
+import tarfile
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -122,6 +126,124 @@ class DockerService:
         except Exception as exc:
             logger.error("Failed to get volume path for %s: %s", volume_name, exc)
             return None
+
+    # ------------------------------------------------------------------
+    # Volume export / import (works from inside a container)
+    # ------------------------------------------------------------------
+
+    HELPER_IMAGE = "alpine:3.20"
+
+    def _ensure_helper_image(self) -> None:
+        """Pull the helper image if it isn't already present."""
+        if not self.client:
+            return
+        try:
+            self.client.images.get(self.HELPER_IMAGE)
+        except Exception:
+            logger.info("Pulling helper image %s ...", self.HELPER_IMAGE)
+            self.client.images.pull(*self.HELPER_IMAGE.split(":"))
+
+    def export_volume(self, volume_name: str, dest_dir: str) -> str | None:
+        """Export a named Docker volume's contents into *dest_dir*/<volume_name>/.
+
+        Spins up a temporary ``alpine`` container that mounts the volume
+        read-only and streams its contents back as a tar archive via the
+        Docker ``get_archive`` API.  This works even when backup-buddy
+        itself is running inside a container (i.e. no host filesystem
+        access).
+
+        Returns the path to the extracted directory, or None on failure.
+        """
+        if not self.client:
+            return None
+
+        container = None
+        out_path = os.path.join(dest_dir, volume_name)
+        os.makedirs(out_path, exist_ok=True)
+
+        try:
+            self._ensure_helper_image()
+
+            # Create (don't start) a disposable container with the volume mounted
+            container = self.client.containers.create(
+                self.HELPER_IMAGE,
+                command="true",
+                volumes={volume_name: {"bind": "/volume_data", "mode": "ro"}},
+            )
+
+            # get_archive streams a tar of /volume_data/.  The paths
+            # inside the tar start with "volume_data/…".
+            bits, _stat = container.get_archive("/volume_data/.")
+            raw = b"".join(bits)
+
+            with tarfile.open(fileobj=io.BytesIO(raw), mode="r") as tar:
+                tar.extractall(path=out_path)
+
+            logger.info("Exported volume %s -> %s", volume_name, out_path)
+            return out_path
+
+        except Exception as exc:
+            logger.error("Failed to export volume %s: %s", volume_name, exc)
+            return None
+        finally:
+            if container:
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
+
+    def import_volume(self, volume_name: str, source_dir: str) -> bool:
+        """Import contents of *source_dir* into a named Docker volume.
+
+        Spins up a temporary ``alpine`` container with the volume mounted
+        read-write, clears existing data, and uploads a tar of
+        *source_dir* into it via ``put_archive``.
+        """
+        if not self.client:
+            return False
+
+        container = None
+        try:
+            self._ensure_helper_image()
+
+            container = self.client.containers.create(
+                self.HELPER_IMAGE,
+                command="true",
+                volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
+            )
+            container.start()
+            container.wait()
+
+            # Clear existing volume data
+            rm_container = self.client.containers.run(
+                self.HELPER_IMAGE,
+                command=["sh", "-c", "rm -rf /volume_data/* /volume_data/.[!.]* 2>/dev/null; true"],
+                volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
+                remove=True,
+            )
+
+            # Build a tar of the source directory contents
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w") as tar:
+                for entry in os.listdir(source_dir):
+                    full = os.path.join(source_dir, entry)
+                    tar.add(full, arcname=entry)
+            buf.seek(0)
+
+            # Upload into the volume via the helper container
+            container.put_archive("/volume_data", buf.getvalue())
+            logger.info("Imported %s -> volume %s", source_dir, volume_name)
+            return True
+
+        except Exception as exc:
+            logger.error("Failed to import into volume %s: %s", volume_name, exc)
+            return False
+        finally:
+            if container:
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
 
     # ------------------------------------------------------------------
     # Internal
