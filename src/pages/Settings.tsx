@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Shield, Database, Bell, Clock, Server, CloudCog, Terminal, Palette, Check } from "lucide-react";
+import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -252,29 +252,6 @@ export default function Settings() {
             <div className="flex items-center justify-between">
               <div><Label>Parallel Uploads</Label><p className="text-sm text-muted-foreground">Enable multi-threaded uploads</p></div>
               <Switch checked={form.parallel_uploads !== false} onCheckedChange={(v) => set("parallel_uploads", v)} />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-panel border-border animate-fade-in">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Bell className="h-5 w-5 text-primary" /></div>
-              <div><CardTitle className="text-lg">Notification Defaults</CardTitle><CardDescription>Global notification preferences</CardDescription></div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div><Label>Notify on Success</Label><p className="text-sm text-muted-foreground">Send notifications for successful backups</p></div>
-              <Switch checked={!!form.notify_success} onCheckedChange={(v) => set("notify_success", v)} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div><Label>Notify on Warning</Label><p className="text-sm text-muted-foreground">Send notifications for backups with warnings</p></div>
-              <Switch checked={form.notify_warning !== false} onCheckedChange={(v) => set("notify_warning", v)} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div><Label>Notify on Failure</Label><p className="text-sm text-muted-foreground">Send notifications for failed backups</p></div>
-              <Switch checked={form.notify_failure !== false} onCheckedChange={(v) => set("notify_failure", v)} />
             </div>
           </CardContent>
         </Card>
