@@ -7,6 +7,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Schedule, BackupJob
 from app.schemas import ScheduleCreate, ScheduleOut, ScheduleUpdate
+from app.services.scheduler_service import scheduler_service
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -45,6 +46,7 @@ def create_schedule(body: ScheduleCreate, db: Session = Depends(get_db)):
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
+    scheduler_service.sync_jobs()
     return _to_out(schedule, db)
 
 
@@ -57,6 +59,7 @@ def update_schedule(schedule_id: int, body: ScheduleUpdate, db: Session = Depend
         setattr(schedule, field, value)
     db.commit()
     db.refresh(schedule)
+    scheduler_service.sync_jobs()
     return _to_out(schedule, db)
 
 
@@ -65,5 +68,10 @@ def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
     schedule = db.query(Schedule).get(schedule_id)
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    # Detach linked jobs so they revert to manual-only
+    db.query(BackupJob).filter(BackupJob.schedule_id == schedule_id).update(
+        {"schedule_id": None}
+    )
     db.delete(schedule)
     db.commit()
+    scheduler_service.sync_jobs()

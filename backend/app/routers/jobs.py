@@ -10,6 +10,7 @@ from app.models import BackupJob, BackupRecord
 from app.schemas import BackupJobCreate, BackupJobOut, BackupJobUpdate
 from app.services.backup_service import backup_service
 from app.services.docker_service import docker_service
+from app.services.scheduler_service import scheduler_service
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -87,6 +88,7 @@ def create_job(body: BackupJobCreate, db: Session = Depends(get_db)):
     db.add(job)
     db.commit()
     db.refresh(job)
+    scheduler_service.sync_jobs()
     return _enrich_job(job, db)
 
 
@@ -99,6 +101,7 @@ def update_job(job_id: int, body: BackupJobUpdate, db: Session = Depends(get_db)
         setattr(job, field, value)
     db.commit()
     db.refresh(job)
+    scheduler_service.sync_jobs()
     return _enrich_job(job, db)
 
 
@@ -109,6 +112,7 @@ def delete_job(job_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
     db.delete(job)
     db.commit()
+    scheduler_service.sync_jobs()
 
 
 @router.post("/{job_id}/run")
@@ -128,6 +132,7 @@ def pause_job(job_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
     job.enabled = False
     db.commit()
+    scheduler_service.sync_jobs()
     return {"message": f"Job '{job.name}' paused"}
 
 
@@ -138,4 +143,5 @@ def resume_job(job_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found")
     job.enabled = True
     db.commit()
+    scheduler_service.sync_jobs()
     return {"message": f"Job '{job.name}' resumed"}
