@@ -1,13 +1,18 @@
 import json
+import logging
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
+from app.config import settings as app_settings
 from app.database import get_db
 from app.models import Setting
 from app.schemas import SettingsBundle
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -55,7 +60,29 @@ def update_settings(bundle: SettingsBundle, db: Session = Depends(get_db)):
         else:
             db.add(Setting(key=key, value=serialized))
     db.commit()
+
+    # If the rclone inline config was provided, write it to the config file
+    _sync_rclone_config(bundle.settings)
+
     return get_settings(db)
+
+
+def _sync_rclone_config(settings_dict: dict[str, Any]) -> None:
+    """Write the rclone_config_inline text to the rclone config file on disk."""
+    config_text = settings_dict.get("rclone_config_inline") or settings_dict.get("rclone_config_text") or ""
+    if not isinstance(config_text, str) or not config_text.strip():
+        return
+
+    config_path = Path(
+        settings_dict.get("rclone_config_path")
+        or app_settings.RCLONE_CONFIG
+    )
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(config_text.strip() + "\n")
+        logger.info("Rclone config written to %s (%d bytes)", config_path, len(config_text))
+    except Exception as exc:
+        logger.error("Failed to write rclone config to %s: %s", config_path, exc)
 
 
 @router.post("/reset")

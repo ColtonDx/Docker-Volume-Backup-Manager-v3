@@ -69,6 +69,7 @@ export const createStorage = (data: StorageBackendCreate) => api.post<StorageBac
 export const updateStorage = (id: number, data: StorageBackendUpdate) => api.put<StorageBackend>(`/storages/${id}`, data);
 export const deleteStorage = (id: number) => api.delete<void>(`/storages/${id}`);
 export const testStorage = (id: number) => api.post<TestResponse>(`/storages/${id}/test`);
+export const fetchRcloneRemotes = () => api.get<{ remotes: string[]; error?: string }>("/storages/rclone/remotes");
 
 // ---- Retention Policies -------------------------------------------------
 export const fetchRotations = () => api.get<RetentionPolicy[]>("/rotations");

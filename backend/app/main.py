@@ -3,8 +3,9 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -66,4 +67,17 @@ app.include_router(settings_router.router, prefix="/api/settings", tags=["settin
 # ---- Serve built frontend (production) -----------------------------------
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 if STATIC_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+    # Serve static assets (JS, CSS, images) normally
+    app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+
+    # SPA catch-all: any non-API route returns index.html so client-side
+    # routing works on page refresh / direct navigation.
+    _index_html = STATIC_DIR / "index.html"
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(request: Request, full_path: str):
+        # If a static file exists at the path, serve it (e.g. robots.txt, favicon)
+        static_file = STATIC_DIR / full_path
+        if full_path and static_file.is_file():
+            return FileResponse(static_file)
+        return FileResponse(_index_html)

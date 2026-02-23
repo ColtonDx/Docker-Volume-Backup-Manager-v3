@@ -20,7 +20,7 @@ import {
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchStorages, createStorage, updateStorage, deleteStorage, testStorage } from "@/api";
+import { fetchStorages, createStorage, updateStorage, deleteStorage, testStorage, fetchRcloneRemotes } from "@/api";
 import type { StorageBackend, StorageBackendConfig } from "@/api/types";
 
 const typeIcons: Record<string, typeof FolderOpen> = {
@@ -58,6 +58,12 @@ export default function Storages() {
   const [form, setForm] = useState({ name: "", type: "localfs", config: defaultConfig("localfs") });
 
   const { data: storages = [], isLoading } = useQuery({ queryKey: ["storages"], queryFn: fetchStorages });
+  const { data: rcloneData } = useQuery({
+    queryKey: ["rclone-remotes"],
+    queryFn: fetchRcloneRemotes,
+    enabled: form.type === "rclone",
+  });
+  const rcloneRemotes = rcloneData?.remotes ?? [];
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["storages"] });
 
   const createMut = useMutation({
@@ -168,7 +174,30 @@ export default function Storages() {
                 )}
                 {form.type === "rclone" && (
                   <>
-                    <div className="space-y-2"><Label>Remote Name</Label><Input className="bg-background border-border font-mono text-sm" placeholder="myremote" value={(form.config.remote_name as string) || ""} onChange={(e) => setConfigField("remote_name", e.target.value)} /></div>
+                    <div className="space-y-2">
+                      <Label>Remote Name</Label>
+                      {rcloneRemotes.length > 0 ? (
+                        <Select
+                          value={(form.config.remote_name as string) || ""}
+                          onValueChange={(v) => setConfigField("remote_name", v)}
+                        >
+                          <SelectTrigger className="bg-background border-border font-mono text-sm">
+                            <SelectValue placeholder="Select a remote" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover border-border">
+                            {rcloneRemotes.map((r) => (
+                              <SelectItem key={r} value={r}>{r}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input className="bg-background border-border font-mono text-sm" placeholder="myremote" value={(form.config.remote_name as string) || ""} onChange={(e) => setConfigField("remote_name", e.target.value)} />
+                      )}
+                      {rcloneRemotes.length === 0 && rcloneData && (
+                        <p className="text-xs text-muted-foreground">No remotes found. Paste your rclone config in Settings and save first.</p>
+                      )}
+                    </div>
+                    <div className="space-y-2"><Label>Remote Path</Label><Input className="bg-background border-border font-mono text-sm" placeholder="/backups" value={(form.config.path as string) || ""} onChange={(e) => setConfigField("path", e.target.value)} /></div>
                     <div className="space-y-2"><Label>Extra Flags</Label><Input className="bg-background border-border font-mono text-sm" placeholder="--transfers=4" value={(form.config.flags as string) || ""} onChange={(e) => setConfigField("flags", e.target.value)} /></div>
                   </>
                 )}
