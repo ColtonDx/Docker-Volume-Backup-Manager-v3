@@ -206,20 +206,21 @@ class DockerService:
         try:
             self._ensure_helper_image()
 
-            container = self.client.containers.create(
-                self.HELPER_IMAGE,
-                command="true",
-                volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
-            )
-            container.start()
-            container.wait()
-
-            # Clear existing volume data
-            rm_container = self.client.containers.run(
+            # Clear existing volume data with a disposable container
+            self.client.containers.run(
                 self.HELPER_IMAGE,
                 command=["sh", "-c", "rm -rf /volume_data/* /volume_data/.[!.]* 2>/dev/null; true"],
                 volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
                 remove=True,
+            )
+
+            # Create (don't start) a helper container with the volume mounted.
+            # Keeping the container in "created" state ensures the volume
+            # mount is active for put_archive (same pattern as export_volume).
+            container = self.client.containers.create(
+                self.HELPER_IMAGE,
+                command="true",
+                volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
             )
 
             # Build a tar of the source directory contents
@@ -232,6 +233,18 @@ class DockerService:
 
             # Upload into the volume via the helper container
             container.put_archive("/volume_data", buf.getvalue())
+
+            # Verify data was written by checking the volume
+            verify = self.client.containers.run(
+                self.HELPER_IMAGE,
+                command=["sh", "-c", "ls -A /volume_data | head -5"],
+                volumes={volume_name: {"bind": "/volume_data", "mode": "ro"}},
+                remove=True,
+            )
+            if not verify or not verify.strip():
+                logger.warning("Volume %s appears empty after import", volume_name)
+                return False
+
             logger.info("Imported %s -> volume %s", source_dir, volume_name)
             return True
 

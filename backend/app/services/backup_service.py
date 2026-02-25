@@ -264,6 +264,7 @@ class BackupService:
                     if os.path.isdir(os.path.join(work_dir, d))
                 ]
 
+                failed_volumes = []
                 for vol_name in volume_names:
                     vol_dir = os.path.join(work_dir, vol_name)
                     ok = docker_service.import_volume(vol_name, vol_dir)
@@ -271,6 +272,7 @@ class BackupService:
                         logger.info("Restored volume %s", vol_name)
                     else:
                         logger.warning("Failed to restore volume %s", vol_name)
+                        failed_volumes.append(vol_name)
 
             # 4. Restart containers
             docker_service.start_containers(stopped)
@@ -281,8 +283,13 @@ class BackupService:
             except Exception:
                 pass
 
-            self._log(db, "success", job_name, f"Restore completed from backup #{backup_id}")
-            notification_service.notify_event("success", job_name, f"Restore completed from backup #{backup_id}")
+            if failed_volumes:
+                msg = f"Restore partially failed: could not import volumes: {', '.join(failed_volumes)}"
+                self._log(db, "warning", job_name, msg)
+                notification_service.notify_event("failure", job_name, msg)
+            else:
+                self._log(db, "success", job_name, f"Restore completed from backup #{backup_id}")
+                notification_service.notify_event("success", job_name, f"Restore completed from backup #{backup_id}")
 
         except Exception as exc:
             logger.exception("Restore from backup %d failed", backup_id)

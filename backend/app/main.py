@@ -27,10 +27,39 @@ from app.routers import (
 from app.services.scheduler_service import scheduler_service
 
 
+def _sync_rclone_config_on_startup() -> None:
+    """Ensure the rclone config file is written to disk from DB settings."""
+    import json, logging
+    _log = logging.getLogger(__name__)
+    try:
+        from app.database import SessionLocal
+        from app.models import Setting
+        db = SessionLocal()
+        try:
+            config_text = None
+            for key in ("rclone_config_inline", "rclone_config_text"):
+                row = db.query(Setting).get(key)
+                if row and row.value:
+                    val = json.loads(row.value) if row.value.startswith('"') else row.value
+                    if isinstance(val, str) and val.strip():
+                        config_text = val.strip()
+                        break
+            if config_text:
+                config_path = Path(settings.RCLONE_CONFIG)
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                config_path.write_text(config_text + "\n")
+                _log.info("Rclone config synced to %s on startup", config_path)
+        finally:
+            db.close()
+    except Exception as exc:
+        _log.warning("Could not sync rclone config on startup: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     init_db()
+    _sync_rclone_config_on_startup()
     scheduler_service.start()
     yield
     # Shutdown

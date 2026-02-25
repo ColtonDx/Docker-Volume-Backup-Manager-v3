@@ -358,9 +358,15 @@ class StorageService:
         from app.config import settings
 
         cmd = [settings.RCLONE_BINARY, "copyto", remote_path, local_path, "--config", settings.RCLONE_CONFIG]
+        extra_flags = config.get("flags", "")
+        if extra_flags:
+            cmd.extend(extra_flags.split())
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         if result.returncode != 0:
             raise RuntimeError(f"rclone download failed: {result.stderr}")
+        # Verify the file was actually downloaded
+        if not os.path.exists(local_path) or os.path.getsize(local_path) == 0:
+            raise RuntimeError(f"rclone download produced empty or missing file: {local_path}")
         return local_path
 
     @staticmethod

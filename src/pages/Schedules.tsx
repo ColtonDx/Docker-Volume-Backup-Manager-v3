@@ -9,6 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
@@ -20,12 +23,36 @@ import {
 import { fetchSchedules, createSchedule, updateSchedule, deleteSchedule } from "@/api";
 import type { Schedule } from "@/api/types";
 
+type FrequencyPreset = "hourly" | "daily" | "weekly" | "monthly" | "custom";
+
+const PRESET_CRON: Record<Exclude<FrequencyPreset, "custom">, string> = {
+  hourly: "0 * * * *",
+  daily: "0 2 * * *",
+  weekly: "0 2 * * 0",
+  monthly: "0 2 1 * *",
+};
+
+const PRESET_DESCRIPTIONS: Record<Exclude<FrequencyPreset, "custom">, string> = {
+  hourly: "Every hour at :00",
+  daily: "Every day at 2:00 AM",
+  weekly: "Every Sunday at 2:00 AM",
+  monthly: "1st of every month at 2:00 AM",
+};
+
+function detectPreset(cron: string): FrequencyPreset {
+  for (const [key, val] of Object.entries(PRESET_CRON)) {
+    if (cron === val) return key as FrequencyPreset;
+  }
+  return "custom";
+}
+
 export default function Schedules() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Schedule | null>(null);
   const [form, setForm] = useState({ name: "", cron: "", description: "" });
+  const [preset, setPreset] = useState<FrequencyPreset>("daily");
 
   const { data: schedules = [], isLoading } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
 
