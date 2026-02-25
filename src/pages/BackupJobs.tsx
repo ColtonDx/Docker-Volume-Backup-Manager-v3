@@ -156,9 +156,10 @@ export default function BackupJobs() {
                 </div>
                 <div className="space-y-2">
                   <Label>Schedule</Label>
-                  <Select value={formData.schedule_id} onValueChange={(v) => setFormData((p) => ({ ...p, schedule_id: v }))}>
-                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select schedule (optional)" /></SelectTrigger>
+                  <Select value={formData.schedule_id || "__manual__"} onValueChange={(v) => setFormData((p) => ({ ...p, schedule_id: v === "__manual__" ? "" : v }))}>
+                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Manual (no schedule)" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
+                      <SelectItem value="__manual__">Manual (no schedule)</SelectItem>
                       {schedules.map((s) => (
                         <SelectItem key={s.id} value={s.id.toString()}>{s.name} ({s.cron})</SelectItem>
                       ))}
@@ -167,9 +168,10 @@ export default function BackupJobs() {
                 </div>
                 <div className="space-y-2">
                   <Label>Retention Policy</Label>
-                  <Select value={formData.retention_id} onValueChange={(v) => setFormData((p) => ({ ...p, retention_id: v }))}>
-                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select policy (optional)" /></SelectTrigger>
+                  <Select value={formData.retention_id || "__none__"} onValueChange={(v) => setFormData((p) => ({ ...p, retention_id: v === "__none__" ? "" : v }))}>
+                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="None (keep all)" /></SelectTrigger>
                     <SelectContent className="bg-popover border-border">
+                      <SelectItem value="__none__">None (keep all)</SelectItem>
                       {rotations.map((r) => (
                         <SelectItem key={r.id} value={r.id.toString()}>{r.name} ({r.retention_days}d)</SelectItem>
                       ))}
