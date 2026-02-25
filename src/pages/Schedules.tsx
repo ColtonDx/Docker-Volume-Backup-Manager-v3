@@ -78,14 +78,28 @@ export default function Schedules() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", cron: "", description: "" });
+    setPreset("daily");
+    setForm({ name: "", cron: PRESET_CRON.daily, description: PRESET_DESCRIPTIONS.daily });
     setDialogOpen(true);
   };
 
   const openEdit = (s: Schedule) => {
     setEditing(s);
+    const detected = detectPreset(s.cron);
+    setPreset(detected);
     setForm({ name: s.name, cron: s.cron, description: s.description || "" });
     setDialogOpen(true);
+  };
+
+  const handlePresetChange = (value: FrequencyPreset) => {
+    setPreset(value);
+    if (value !== "custom") {
+      setForm((p) => ({
+        ...p,
+        cron: PRESET_CRON[value],
+        description: p.description || PRESET_DESCRIPTIONS[value],
+      }));
+    }
   };
 
   const handleSave = () => {
@@ -112,7 +126,7 @@ export default function Schedules() {
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>{editing ? "Edit Schedule" : "Create Schedule"}</DialogTitle>
-                <DialogDescription>Define a cron-based schedule for backup jobs.</DialogDescription>
+                <DialogDescription>Define a schedule for backup jobs.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
@@ -120,13 +134,35 @@ export default function Schedules() {
                   <Input id="schedule-name" placeholder="e.g. Daily Backup" className="bg-background border-border" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="cron">Cron Expression</Label>
-                  <Input id="cron" placeholder="0 23 * * *" className="bg-background border-border font-mono" value={form.cron} onChange={(e) => setForm((p) => ({ ...p, cron: e.target.value }))} />
-                  <p className="text-xs text-muted-foreground">Format: minute hour day month weekday</p>
+                  <Label>Frequency</Label>
+                  <Select value={preset} onValueChange={(v) => handlePresetChange(v as FrequencyPreset)}>
+                    <SelectTrigger className="bg-background border-border">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="hourly">Hourly</SelectItem>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {preset !== "custom" && (
+                    <p className="text-xs text-muted-foreground">
+                      {PRESET_DESCRIPTIONS[preset]} &mdash; <code className="font-mono">{PRESET_CRON[preset]}</code>
+                    </p>
+                  )}
                 </div>
+                {preset === "custom" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="cron">Cron Expression</Label>
+                    <Input id="cron" placeholder="0 23 * * *" className="bg-background border-border font-mono" value={form.cron} onChange={(e) => setForm((p) => ({ ...p, cron: e.target.value }))} />
+                    <p className="text-xs text-muted-foreground">Format: minute hour day month weekday</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
-                  <Input id="description" placeholder="e.g. Every day at 11:00 PM" className="bg-background border-border" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
+                  <Input id="description" placeholder="e.g. Every day at 2:00 AM" className="bg-background border-border" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
                 </div>
               </div>
               <DialogFooter>
