@@ -46,6 +46,11 @@ DEFAULTS: dict[str, Any] = {
     "notify_on_failure": True,
     "log_retention_backup_days": 30,
     "log_retention_system_days": 14,
+    "syslog_enabled": False,
+    "syslog_host": "",
+    "syslog_port": 514,
+    "syslog_protocol": "udp",
+    "syslog_facility": "local0",
 }
 
 
@@ -74,6 +79,10 @@ def update_settings(bundle: SettingsBundle, db: Session = Depends(get_db)):
 
     # If the rclone inline config was provided, write it to the config file
     _sync_rclone_config(bundle.settings)
+
+    # Reconfigure syslog if settings changed
+    from app.syslog_handler import configure_syslog
+    configure_syslog(bundle.settings)
 
     return get_settings(db)
 

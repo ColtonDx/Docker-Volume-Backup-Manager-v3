@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check, Download, Upload } from "lucide-react";
+import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check, Download, Upload, Radio } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -266,6 +266,60 @@ export default function Settings() {
                 value={(form.rclone_config_inline as string) || ""}
                 onChange={(e) => set("rclone_config_inline", e.target.value)}
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-border animate-fade-in">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Radio className="h-5 w-5 text-primary" /></div>
+              <div><CardTitle className="text-lg">External Logging (Syslog)</CardTitle><CardDescription>Forward application logs to an external syslog server</CardDescription></div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div><Label>Enable Syslog</Label><p className="text-sm text-muted-foreground">Send logs to a remote syslog receiver</p></div>
+              <Switch checked={!!form.syslog_enabled} onCheckedChange={(v) => set("syslog_enabled", v)} />
+            </div>
+            <Separator className="bg-border" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Syslog Host</Label>
+                <Input className="bg-background border-border font-mono text-sm" placeholder="192.168.1.100 or syslog.example.com" value={(form.syslog_host as string) || ""} onChange={(e) => set("syslog_host", e.target.value)} disabled={!form.syslog_enabled} />
+              </div>
+              <div className="space-y-2">
+                <Label>Syslog Port</Label>
+                <Input className="bg-background border-border font-mono text-sm" type="number" value={String(form.syslog_port ?? 514)} onChange={(e) => set("syslog_port", Number(e.target.value))} disabled={!form.syslog_enabled} />
+              </div>
+              <div className="space-y-2">
+                <Label>Protocol</Label>
+                <Select value={(form.syslog_protocol as string) || "udp"} onValueChange={(v) => set("syslog_protocol", v)} disabled={!form.syslog_enabled}>
+                  <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    <SelectItem value="udp">UDP</SelectItem>
+                    <SelectItem value="tcp">TCP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Facility</Label>
+                <Select value={(form.syslog_facility as string) || "local0"} onValueChange={(v) => set("syslog_facility", v)} disabled={!form.syslog_enabled}>
+                  <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    <SelectItem value="local0">local0</SelectItem>
+                    <SelectItem value="local1">local1</SelectItem>
+                    <SelectItem value="local2">local2</SelectItem>
+                    <SelectItem value="local3">local3</SelectItem>
+                    <SelectItem value="local4">local4</SelectItem>
+                    <SelectItem value="local5">local5</SelectItem>
+                    <SelectItem value="local6">local6</SelectItem>
+                    <SelectItem value="local7">local7</SelectItem>
+                    <SelectItem value="daemon">daemon</SelectItem>
+                    <SelectItem value="user">user</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>

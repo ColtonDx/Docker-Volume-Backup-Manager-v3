@@ -27,6 +27,34 @@ from app.routers import (
 from app.services.scheduler_service import scheduler_service
 
 
+def _configure_syslog_on_startup() -> None:
+    """Read syslog settings from DB and attach handler if enabled."""
+    import json, logging
+    _log = logging.getLogger(__name__)
+    try:
+        from app.database import SessionLocal
+        from app.models import Setting
+        from app.syslog_handler import configure_syslog
+        db = SessionLocal()
+        try:
+            syslog_keys = ("syslog_enabled", "syslog_host", "syslog_port",
+                           "syslog_protocol", "syslog_facility")
+            syslog_settings: dict = {}
+            for key in syslog_keys:
+                row = db.query(Setting).get(key)
+                if row and row.value is not None:
+                    try:
+                        syslog_settings[key] = json.loads(row.value)
+                    except (json.JSONDecodeError, TypeError):
+                        syslog_settings[key] = row.value
+            if syslog_settings:
+                configure_syslog(syslog_settings)
+        finally:
+            db.close()
+    except Exception as exc:
+        _log.warning("Could not configure syslog on startup: %s", exc)
+
+
 def _sync_rclone_config_on_startup() -> None:
     """Ensure the rclone config file is written to disk from DB settings."""
     import json, logging
@@ -60,6 +88,7 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     _sync_rclone_config_on_startup()
+    _configure_syslog_on_startup()
     scheduler_service.start()
     yield
     # Shutdown
