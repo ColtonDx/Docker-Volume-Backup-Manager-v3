@@ -80,6 +80,12 @@ class BackupService:
             container_ids = [c["id"] for c in containers]
             container_names = [c["name"] for c in containers]
 
+            if not containers:
+                raise RuntimeError(
+                    f"No containers matched label '{label_key}={job.name}'. "
+                    "Ensure your containers have the correct label set."
+                )
+
             # 2. Collect volumes from those containers
             all_volumes: list[dict[str, str]] = []
             volume_names_set: set[str] = set()
