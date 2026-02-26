@@ -140,7 +140,7 @@ export function AppSidebar() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="status-dot status-dot-active" />
-            <span className="text-xs text-muted-foreground">System Online</span>
+            <span className="text-xs text-muted-foreground">v{__APP_VERSION__}</span>
           </div>
           <button
             onClick={logout}

@@ -28,6 +28,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend code
 COPY backend/app/ app/
 
+# Copy VERSION file for runtime version display
+COPY VERSION .
+
 # Copy built frontend into static dir served by FastAPI
 COPY --from=frontend-build /app/dist /app/static
 

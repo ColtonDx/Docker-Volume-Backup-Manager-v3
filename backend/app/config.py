@@ -2,11 +2,22 @@ import os
 from pathlib import Path
 
 
+def _read_version() -> str:
+    """Read version from the VERSION file at the repo/container root."""
+    for candidate in (
+        Path(__file__).resolve().parent.parent.parent / "VERSION",  # dev: repo root
+        Path(__file__).resolve().parent.parent / "VERSION",        # container: /app/VERSION
+    ):
+        if candidate.is_file():
+            return candidate.read_text().strip()
+    return "0.0.0-dev"
+
+
 class Settings:
     """Application settings loaded from environment variables."""
 
     APP_NAME: str = os.getenv("APP_NAME", "Backup Buddy")
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = _read_version()
 
     # Auth
     AUTH_PASSWORD: str = os.getenv("BACKUP_BUDDY_PASSWORD", "admin")
