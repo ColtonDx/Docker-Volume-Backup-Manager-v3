@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json bun.lockb ./
 RUN npm install
 COPY index.html vite.config.ts tsconfig*.json tailwind.config.ts postcss.config.js components.json ./
+COPY VERSION .
 COPY public/ public/
 COPY src/ src/
 RUN npm run build
