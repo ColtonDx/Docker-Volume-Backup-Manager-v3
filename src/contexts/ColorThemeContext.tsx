@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
  * This keeps the door open for entirely new theme families
  * (e.g. "minimal-blue", "neon-pink") later.
  */
-export type ThemeId = "default-blue" | "default-purple" | "default-red" | "default-green";
+export type ThemeId = "default-blue" | "default-purple" | "default-red" | "default-green" | "cyberpunk";
 
 export interface ThemeOption {
   id: ThemeId;
@@ -21,6 +21,7 @@ export const THEMES: ThemeOption[] = [
   { id: "default-purple", label: "Default - Purple", swatch: "bg-[hsl(270,65%,50%)]",  previewBg: "bg-[hsl(270,40%,6%)]" },
   { id: "default-red",    label: "Default - Red",    swatch: "bg-[hsl(0,72%,51%)]",    previewBg: "bg-[hsl(0,35%,6%)]" },
   { id: "default-green",  label: "Default - Green",  swatch: "bg-[hsl(152,69%,36%)]",  previewBg: "bg-[hsl(152,35%,5%)]" },
+  { id: "cyberpunk",      label: "Cyberpunk",        swatch: "bg-[hsl(54,96%,60%)]" ,  previewBg: "bg-[hsl(230,25%,4%)]" },
 ];
 
 const VALID_IDS = THEMES.map((t) => t.id) as string[];

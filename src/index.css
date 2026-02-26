@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap');
 
 @layer base {
   :root {
@@ -162,6 +162,182 @@
 }
 
 /* ================================================
+   CYBERPUNK THEME — fonts, textures, scanlines, neon
+   ================================================ */
+
+/* -- Font overrides -- */
+[data-theme="cyberpunk"] body,
+[data-theme="cyberpunk"] h1,
+[data-theme="cyberpunk"] h2,
+[data-theme="cyberpunk"] h3,
+[data-theme="cyberpunk"] h4,
+[data-theme="cyberpunk"] h5,
+[data-theme="cyberpunk"] h6,
+[data-theme="cyberpunk"] [class*="CardTitle"],
+[data-theme="cyberpunk"] [class*="PageHeader"],
+[data-theme="cyberpunk"] button,
+[data-theme="cyberpunk"] label,
+[data-theme="cyberpunk"] span,
+[data-theme="cyberpunk"] p,
+[data-theme="cyberpunk"] a,
+[data-theme="cyberpunk"] div {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+[data-theme="cyberpunk"] h1,
+[data-theme="cyberpunk"] h2,
+[data-theme="cyberpunk"] h3 {
+  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* -- Scanline overlay on the entire page -- */
+[data-theme="cyberpunk"]::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.04) 2px,
+    rgba(0, 0, 0, 0.04) 4px
+  );
+  mix-blend-mode: overlay;
+}
+
+/* -- Noise texture on cards -- */
+[data-theme="cyberpunk"] .glass-panel {
+  background-image:
+    linear-gradient(135deg, hsl(230 30% 10% / 0.9), hsl(230 30% 6% / 0.95)),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  border-color: hsl(54 96% 60% / 0.15);
+  border-width: 1px;
+  backdrop-filter: blur(12px);
+  clip-path: polygon(
+    0 8px, 8px 0, calc(100% - 8px) 0, 100% 8px,
+    100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px)
+  );
+}
+
+/* -- Neon glow on primary elements -- */
+[data-theme="cyberpunk"] .glow-primary {
+  box-shadow:
+    0 0 8px hsl(54 96% 60% / 0.5),
+    0 0 24px hsl(54 96% 60% / 0.25),
+    0 0 48px hsl(54 96% 60% / 0.1);
+}
+
+/* -- Sidebar gets a subtle left-edge neon bar -- */
+[data-theme="cyberpunk"] [data-sidebar] {
+  border-right: 2px solid hsl(54 96% 60% / 0.25);
+  box-shadow: inset -1px 0 12px hsl(54 96% 60% / 0.05);
+}
+
+/* -- Active sidebar link neon accent -- */
+[data-theme="cyberpunk"] [data-sidebar] a.bg-primary\/10 {
+  border-left: 3px solid hsl(54 96% 60% / 0.8);
+  box-shadow: inset 4px 0 8px hsl(54 96% 60% / 0.1);
+}
+
+/* -- Buttons: clipped corners + glow -- */
+[data-theme="cyberpunk"] button[class*="bg-primary"],
+[data-theme="cyberpunk"] [role="button"][class*="bg-primary"] {
+  clip-path: polygon(0 4px, 4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px));
+  box-shadow: 0 0 10px hsl(54 96% 60% / 0.3);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+/* -- Input fields: bottom-border neon accent -- */
+[data-theme="cyberpunk"] input,
+[data-theme="cyberpunk"] textarea,
+[data-theme="cyberpunk"] select,
+[data-theme="cyberpunk"] [role="combobox"] {
+  border-radius: 2px;
+  border-bottom: 2px solid hsl(54 96% 60% / 0.3);
+  transition: border-color 0.2s;
+}
+[data-theme="cyberpunk"] input:focus,
+[data-theme="cyberpunk"] textarea:focus,
+[data-theme="cyberpunk"] select:focus,
+[data-theme="cyberpunk"] [role="combobox"]:focus {
+  border-bottom-color: hsl(54 96% 60% / 0.8);
+  box-shadow: 0 2px 8px hsl(54 96% 60% / 0.15);
+}
+
+/* -- Tables: neon row borders -- */
+[data-theme="cyberpunk"] tr {
+  border-bottom: 1px solid hsl(54 96% 60% / 0.08);
+}
+[data-theme="cyberpunk"] th {
+  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.7rem;
+  color: hsl(54 96% 60% / 0.7);
+}
+
+/* -- Status dots: cyberpunk glow -- */
+[data-theme="cyberpunk"] .status-dot-active {
+  box-shadow: 0 0 6px hsl(160 90% 42% / 0.8);
+}
+[data-theme="cyberpunk"] .status-dot-error {
+  box-shadow: 0 0 6px hsl(340 100% 55% / 0.8);
+}
+[data-theme="cyberpunk"] .status-dot-warning {
+  box-shadow: 0 0 6px hsl(54 96% 60% / 0.8);
+}
+
+/* -- Badge/chip clipped corners -- */
+[data-theme="cyberpunk"] [class*="Badge"],
+[data-theme="cyberpunk"] [class*="badge"] {
+  clip-path: polygon(0 3px, 3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 0 calc(100% - 3px));
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* -- Scrollbar styling -- */
+[data-theme="cyberpunk"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+[data-theme="cyberpunk"] ::-webkit-scrollbar-track {
+  background: hsl(230 25% 4%);
+}
+[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb {
+  background: hsl(54 96% 60% / 0.25);
+  border-radius: 0;
+}
+[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb:hover {
+  background: hsl(54 96% 60% / 0.5);
+}
+
+/* -- Text gradient override for cyberpunk -- */
+[data-theme="cyberpunk"] .text-gradient {
+  background: linear-gradient(90deg, hsl(54 96% 60%), hsl(340 100% 55%));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* -- Popover/dropdown: clipped + border glow -- */
+[data-theme="cyberpunk"] [data-radix-popper-content-wrapper] > div {
+  clip-path: polygon(
+    0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px,
+    100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px)
+  );
+  border: 1px solid hsl(54 96% 60% / 0.2);
+}
+
+/* ================================================
    THEMES — full color scheme overrides
    Architecture: [data-theme="<family>-<variant>"]
    ================================================ */
@@ -281,4 +457,56 @@
   --sidebar-border: 152 20% 16%;
   --sidebar-ring: 152 69% 46%;
   --chart-1: 152 69% 46%;
+}
+
+/* ---------- Cyberpunk 2077 ---------- */
+[data-theme="cyberpunk"] {
+  --primary: 54 96% 60%;
+  --primary-foreground: 0 0% 0%;
+  --accent: 340 100% 50%;
+  --accent-foreground: 0 0% 100%;
+  --ring: 54 96% 60%;
+  --sidebar-primary: 54 96% 60%;
+  --sidebar-ring: 54 96% 60%;
+  --chart-1: 54 96% 60%;
+}
+.dark[data-theme="cyberpunk"],
+[data-theme="cyberpunk"].dark {
+  --background: 230 25% 4%;
+  --foreground: 54 20% 92%;
+  --card: 230 30% 7%;
+  --card-foreground: 54 20% 92%;
+  --popover: 230 30% 9%;
+  --popover-foreground: 54 20% 92%;
+  --primary: 54 96% 60%;
+  --primary-foreground: 230 25% 4%;
+  --secondary: 230 20% 14%;
+  --secondary-foreground: 54 20% 92%;
+  --muted: 230 20% 12%;
+  --muted-foreground: 230 10% 50%;
+  --accent: 340 100% 55%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 340 100% 55%;
+  --destructive-foreground: 54 20% 92%;
+  --success: 160 90% 42%;
+  --success-foreground: 230 25% 4%;
+  --warning: 54 96% 60%;
+  --warning-foreground: 230 25% 4%;
+  --border: 230 30% 16%;
+  --input: 230 30% 14%;
+  --ring: 54 96% 60%;
+  --sidebar-background: 230 30% 5%;
+  --sidebar-foreground: 230 10% 55%;
+  --sidebar-primary: 54 96% 60%;
+  --sidebar-primary-foreground: 230 25% 4%;
+  --sidebar-accent: 230 20% 12%;
+  --sidebar-accent-foreground: 54 20% 92%;
+  --sidebar-border: 230 30% 16%;
+  --sidebar-ring: 54 96% 60%;
+  --chart-1: 54 96% 60%;
+  --chart-2: 340 100% 55%;
+  --chart-3: 185 90% 48%;
+  --chart-4: 160 90% 42%;
+  --chart-5: 270 80% 60%;
+  --radius: 0.15rem;
 }
