@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, MoreVertical, Play, Pause, Trash2, Edit, Database } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Plus, MoreVertical, Play, Pause, Trash2, Edit, Database, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -26,17 +26,56 @@ import {
 import { fetchJobs, createJob, updateJob, deleteJob, runJob, pauseJob, resumeJob, fetchStorages, fetchSchedules, fetchRotations } from "@/api";
 import type { BackupJob } from "@/api/types";
 
+type SortKey = "name" | "label" | "containers" | "storage" | "schedule" | "status" | "last_run";
+type SortDir = "asc" | "desc";
+
 export default function BackupJobs() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [editingJob, setEditingJob] = useState<BackupJob | null>(null);
   const [formData, setFormData] = useState({ name: "", storage_id: "", schedule_id: "", retention_id: "" });
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const { data: jobs = [], isLoading } = useQuery({ queryKey: ["jobs"], queryFn: fetchJobs });
   const { data: storages = [] } = useQuery({ queryKey: ["storages"], queryFn: fetchStorages });
   const { data: schedules = [] } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
   const { data: rotations = [] } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-40" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="h-3 w-3 ml-1 inline" />
+      : <ArrowDown className="h-3 w-3 ml-1 inline" />;
+  };
+
+  const sortedJobs = useMemo(() => {
+    const m = sortDir === "asc" ? 1 : -1;
+    return [...jobs].sort((a, b) => {
+      let av: string, bv: string;
+      switch (sortKey) {
+        case "name":      av = a.name.toLowerCase(); bv = b.name.toLowerCase(); break;
+        case "label":     av = a.label.toLowerCase(); bv = b.label.toLowerCase(); break;
+        case "containers": av = a.containers.join(", ").toLowerCase(); bv = b.containers.join(", ").toLowerCase(); break;
+        case "storage":   av = (a.storage?.name || "").toLowerCase(); bv = (b.storage?.name || "").toLowerCase(); break;
+        case "schedule":  av = (a.schedule?.name || "zzz").toLowerCase(); bv = (b.schedule?.name || "zzz").toLowerCase(); break;
+        case "status":    av = a.status; bv = b.status; break;
+        case "last_run":  av = a.last_run || ""; bv = b.last_run || ""; break;
+        default:          av = ""; bv = "";
+      }
+      return av < bv ? -m : av > bv ? m : 0;
+    });
+  }, [jobs, sortKey, sortDir]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["jobs"] });
@@ -198,18 +237,18 @@ export default function BackupJobs() {
             <Table>
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
-                  <TableHead className="text-muted-foreground">Job Name</TableHead>
-                  <TableHead className="text-muted-foreground">Docker Label</TableHead>
-                  <TableHead className="text-muted-foreground">Matched Containers</TableHead>
-                  <TableHead className="text-muted-foreground">Storage</TableHead>
-                  <TableHead className="text-muted-foreground">Schedule</TableHead>
-                  <TableHead className="text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-muted-foreground">Last Run</TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("name")}>Job Name <SortIcon col="name" /></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("label")}>Docker Label <SortIcon col="label" /></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("containers")}>Matched Containers <SortIcon col="containers" /></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("storage")}>Storage <SortIcon col="storage" /></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("schedule")}>Schedule <SortIcon col="schedule" /></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("status")}>Status <SortIcon col="status" /></TableHead>
+                  <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("last_run")}>Last Run <SortIcon col="last_run" /></TableHead>
                   <TableHead className="text-muted-foreground text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {jobs.map((job) => (
+                {sortedJobs.map((job) => (
                   <TableRow key={job.id} className="border-border hover:bg-muted/30">
                     <TableCell>
                       <div className="flex items-center gap-3">
