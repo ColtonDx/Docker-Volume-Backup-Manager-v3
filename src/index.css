@@ -388,12 +388,12 @@
    SYNTHWAVE — neon-pink / sunset colour-specific effects
    ================================================ */
 
-/* -- Noise texture on cards (purple-tinted) -- */
+/* -- Noise texture on cards (purple-tinted, cyan border) -- */
 [data-theme="synthwave"] .glass-panel {
   background-image:
-    linear-gradient(135deg, hsl(265 35% 11% / 0.9), hsl(265 35% 7% / 0.95)),
+    linear-gradient(135deg, hsl(265 35% 11% / 0.9), hsl(250 40% 7% / 0.95)),
     url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-  border-color: hsl(320 100% 60% / 0.15);
+  border-color: hsl(185 90% 50% / 0.12);
   border-width: 1px;
   backdrop-filter: blur(12px);
   clip-path: polygon(
@@ -405,18 +405,18 @@
 [data-theme="synthwave"] .glow-primary {
   box-shadow:
     0 0 8px hsl(320 100% 60% / 0.5),
-    0 0 24px hsl(320 100% 60% / 0.25),
-    0 0 48px hsl(320 100% 60% / 0.1);
+    0 0 24px hsl(320 100% 60% / 0.2),
+    0 0 48px hsl(185 90% 50% / 0.12);
 }
 
 [data-theme="synthwave"] [data-sidebar] {
-  border-right: 2px solid hsl(320 100% 60% / 0.25);
-  box-shadow: inset -1px 0 12px hsl(320 100% 60% / 0.05);
+  border-right: 2px solid hsl(185 90% 50% / 0.2);
+  box-shadow: inset -1px 0 12px hsl(185 90% 50% / 0.04);
 }
 
 [data-theme="synthwave"] [data-sidebar] a.bg-primary\/10 {
-  border-left: 3px solid hsl(320 100% 60% / 0.8);
-  box-shadow: inset 4px 0 8px hsl(320 100% 60% / 0.1);
+  border-left: 3px solid hsl(185 90% 50% / 0.7);
+  box-shadow: inset 4px 0 8px hsl(185 90% 50% / 0.08);
 }
 
 [data-theme="synthwave"] button[class*="bg-primary"],
@@ -428,21 +428,21 @@
 [data-theme="synthwave"] textarea,
 [data-theme="synthwave"] select,
 [data-theme="synthwave"] [role="combobox"] {
-  border-bottom: 2px solid hsl(320 100% 60% / 0.3);
+  border-bottom: 2px solid hsl(185 90% 50% / 0.25);
 }
 [data-theme="synthwave"] input:focus,
 [data-theme="synthwave"] textarea:focus,
 [data-theme="synthwave"] select:focus,
 [data-theme="synthwave"] [role="combobox"]:focus {
-  border-bottom-color: hsl(320 100% 60% / 0.8);
-  box-shadow: 0 2px 8px hsl(320 100% 60% / 0.15);
+  border-bottom-color: hsl(185 90% 50% / 0.7);
+  box-shadow: 0 2px 8px hsl(185 90% 50% / 0.15);
 }
 
 [data-theme="synthwave"] tr {
-  border-bottom: 1px solid hsl(320 100% 60% / 0.08);
+  border-bottom: 1px solid hsl(185 90% 50% / 0.08);
 }
 [data-theme="synthwave"] th {
-  color: hsl(320 100% 60% / 0.7);
+  color: hsl(185 90% 50% / 0.65);
 }
 
 [data-theme="synthwave"] .status-dot-active {
@@ -459,11 +459,11 @@
   background: hsl(265 35% 5%);
 }
 [data-theme="synthwave"] ::-webkit-scrollbar-thumb {
-  background: hsl(320 100% 60% / 0.25);
+  background: hsl(185 90% 50% / 0.2);
   border-radius: 0;
 }
 [data-theme="synthwave"] ::-webkit-scrollbar-thumb:hover {
-  background: hsl(320 100% 60% / 0.5);
+  background: hsl(185 90% 50% / 0.45);
 }
 
 [data-theme="synthwave"] .text-gradient {
@@ -474,7 +474,7 @@
 }
 
 [data-theme="synthwave"] [data-radix-popper-content-wrapper] > div {
-  border: 1px solid hsl(320 100% 60% / 0.2);
+  border: 1px solid hsl(185 90% 50% / 0.18);
 }
 
 /* ================================================
@@ -665,36 +665,36 @@
 .dark[data-theme="synthwave"],
 [data-theme="synthwave"].dark {
   --background: 265 35% 5%;
-  --foreground: 280 20% 92%;
+  --foreground: 200 30% 92%;
   --card: 265 35% 8%;
-  --card-foreground: 280 20% 92%;
+  --card-foreground: 200 30% 92%;
   --popover: 265 35% 10%;
-  --popover-foreground: 280 20% 92%;
+  --popover-foreground: 200 30% 92%;
   --primary: 320 100% 60%;
   --primary-foreground: 265 35% 5%;
-  --secondary: 265 25% 15%;
-  --secondary-foreground: 280 20% 92%;
-  --muted: 265 25% 12%;
-  --muted-foreground: 265 15% 48%;
+  --secondary: 240 25% 16%;
+  --secondary-foreground: 200 30% 92%;
+  --muted: 240 25% 13%;
+  --muted-foreground: 200 30% 50%;
   --accent: 185 90% 50%;
   --accent-foreground: 265 35% 5%;
   --destructive: 0 80% 55%;
-  --destructive-foreground: 280 20% 92%;
+  --destructive-foreground: 200 30% 92%;
   --success: 185 90% 50%;
   --success-foreground: 265 35% 5%;
   --warning: 35 95% 55%;
   --warning-foreground: 265 35% 5%;
-  --border: 265 30% 18%;
-  --input: 265 30% 15%;
-  --ring: 320 100% 60%;
-  --sidebar-background: 265 35% 6%;
-  --sidebar-foreground: 265 15% 55%;
+  --border: 220 35% 20%;
+  --input: 220 35% 17%;
+  --ring: 185 90% 50%;
+  --sidebar-background: 260 35% 6%;
+  --sidebar-foreground: 200 30% 58%;
   --sidebar-primary: 320 100% 60%;
   --sidebar-primary-foreground: 265 35% 5%;
-  --sidebar-accent: 265 25% 12%;
-  --sidebar-accent-foreground: 280 20% 92%;
-  --sidebar-border: 265 30% 18%;
-  --sidebar-ring: 320 100% 60%;
+  --sidebar-accent: 240 25% 13%;
+  --sidebar-accent-foreground: 200 30% 92%;
+  --sidebar-border: 220 35% 20%;
+  --sidebar-ring: 185 90% 50%;
   --chart-1: 320 100% 60%;
   --chart-2: 185 90% 50%;
   --chart-3: 35 95% 55%;
