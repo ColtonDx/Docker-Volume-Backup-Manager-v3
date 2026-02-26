@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -183,3 +183,153 @@ def export_config(db: Session = Depends(get_db)):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/import")
+def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Import configuration from a previously exported .zip file.
+
+    The zip is expected to contain JSON files produced by the /export endpoint.
+    Existing rows in each table are replaced (upsert by primary key).
+    Foreign-key dependent tables (backup_jobs) are loaded last so that
+    referenced schedules / storages / retention policies already exist.
+    """
+    if not file.filename or not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="File must be a .zip archive")
+
+    try:
+        raw = file.file.read()
+        zf = zipfile.ZipFile(io.BytesIO(raw))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid or corrupted zip file")
+
+    def _read_json(name: str):
+        """Read and parse a JSON file from the zip, returning None if missing."""
+        try:
+            return json.loads(zf.read(name))
+        except KeyError:
+            return None
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON in {name}")
+
+    imported: dict[str, int] = {}
+
+    # ── 1. Settings (key-value) ────────────────────────────────────────────
+    settings_dict = _read_json("settings.json")
+    if settings_dict and isinstance(settings_dict, dict):
+        for key, value in settings_dict.items():
+            existing = db.query(Setting).get(key)
+            serialized = json.dumps(value)
+            if existing:
+                existing.value = serialized
+            else:
+                db.add(Setting(key=key, value=serialized))
+        imported["settings"] = len(settings_dict)
+
+    # ── 2. Storage Backends ────────────────────────────────────────────────
+    storages_list = _read_json("storage_backends.json")
+    if storages_list and isinstance(storages_list, list):
+        for item in storages_list:
+            row = db.query(StorageBackend).get(item["id"])
+            if row:
+                row.name = item["name"]
+                row.type = item["type"]
+                row.config_json = item.get("config_json", "{}")
+            else:
+                db.add(StorageBackend(
+                    id=item["id"], name=item["name"], type=item["type"],
+                    config_json=item.get("config_json", "{}"),
+                ))
+        imported["storage_backends"] = len(storages_list)
+
+    # ── 3. Schedules ──────────────────────────────────────────────────────
+    schedules_list = _read_json("schedules.json")
+    if schedules_list and isinstance(schedules_list, list):
+        for item in schedules_list:
+            row = db.query(Schedule).get(item["id"])
+            if row:
+                row.name = item["name"]
+                row.cron = item["cron"]
+                row.description = item.get("description")
+                row.enabled = item.get("enabled", True)
+            else:
+                db.add(Schedule(
+                    id=item["id"], name=item["name"], cron=item["cron"],
+                    description=item.get("description"),
+                    enabled=item.get("enabled", True),
+                ))
+        imported["schedules"] = len(schedules_list)
+
+    # ── 4. Retention Policies ─────────────────────────────────────────────
+    retention_list = _read_json("retention_policies.json")
+    if retention_list and isinstance(retention_list, list):
+        for item in retention_list:
+            row = db.query(RetentionPolicy).get(item["id"])
+            if row:
+                row.name = item["name"]
+                row.description = item.get("description")
+                row.retention_days = item["retention_days"]
+                row.min_backups = item.get("min_backups", 1)
+                row.max_backups = item.get("max_backups")
+            else:
+                db.add(RetentionPolicy(
+                    id=item["id"], name=item["name"],
+                    description=item.get("description"),
+                    retention_days=item["retention_days"],
+                    min_backups=item.get("min_backups", 1),
+                    max_backups=item.get("max_backups"),
+                ))
+        imported["retention_policies"] = len(retention_list)
+
+    # Flush so FK references resolve for backup_jobs
+    db.flush()
+
+    # ── 5. Notification Channels ──────────────────────────────────────────
+    notif_list = _read_json("notification_channels.json")
+    if notif_list and isinstance(notif_list, list):
+        for item in notif_list:
+            row = db.query(NotificationChannel).get(item["id"])
+            if row:
+                row.name = item["name"]
+                row.type = item["type"]
+                row.config_json = item.get("config_json", "{}")
+                row.events_json = item.get("events_json", "[]")
+                row.enabled = item.get("enabled", True)
+            else:
+                db.add(NotificationChannel(
+                    id=item["id"], name=item["name"], type=item["type"],
+                    config_json=item.get("config_json", "{}"),
+                    events_json=item.get("events_json", "[]"),
+                    enabled=item.get("enabled", True),
+                ))
+        imported["notification_channels"] = len(notif_list)
+
+    # ── 6. Backup Jobs (depends on storages, schedules, retention) ────────
+    jobs_list = _read_json("backup_jobs.json")
+    if jobs_list and isinstance(jobs_list, list):
+        for item in jobs_list:
+            row = db.query(BackupJob).get(item["id"])
+            if row:
+                row.name = item["name"]
+                row.storage_id = item["storage_id"]
+                row.schedule_id = item.get("schedule_id")
+                row.retention_id = item.get("retention_id")
+                row.enabled = item.get("enabled", True)
+            else:
+                db.add(BackupJob(
+                    id=item["id"], name=item["name"],
+                    storage_id=item["storage_id"],
+                    schedule_id=item.get("schedule_id"),
+                    retention_id=item.get("retention_id"),
+                    enabled=item.get("enabled", True),
+                ))
+        imported["backup_jobs"] = len(jobs_list)
+
+    db.commit()
+
+    # Sync rclone config to disk if it was part of the import
+    if settings_dict:
+        _sync_rclone_config(settings_dict)
+
+    logger.info("Config imported: %s", imported)
+    return {"status": "ok", "imported": imported}

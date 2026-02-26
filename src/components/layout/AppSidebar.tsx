@@ -35,7 +35,7 @@ const configNavItems = [
   { title: "Schedules", url: "/schedules", icon: Calendar },
   { title: "Notifications", url: "/notifications", icon: Bell },
   { title: "Backend Storages", url: "/storages", icon: HardDrive },
-  { title: "Rotations", url: "/rotations", icon: RotateCcw },
+  { title: "Retention Policies", url: "/rotations", icon: RotateCcw },
 ];
 
 const systemNavItems = [

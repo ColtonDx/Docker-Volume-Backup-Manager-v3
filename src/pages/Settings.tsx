@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check, Download } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check, Download, Upload } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -54,6 +54,36 @@ export default function Settings() {
   });
 
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [confirmImport, setConfirmImport] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportConfig = async (file: File) => {
+    setImporting(true);
+    try {
+      const token = sessionStorage.getItem("dvbm_token");
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/settings/import", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Import failed" }));
+        throw new Error(err.detail || "Import failed");
+      }
+      const result = await res.json();
+      const counts = Object.entries(result.imported || {}).map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ");
+      toast.success(`Config imported: ${counts}`);
+      queryClient.invalidateQueries();
+    } catch (err: any) {
+      toast.error(err.message || "Import failed");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
   const handleExportConfig = async () => {
     setExporting(true);
     try {
@@ -329,11 +359,19 @@ export default function Settings() {
               <div><CardTitle className="text-lg">Config Backup</CardTitle><CardDescription>Export all jobs, schedules, storages, notifications and settings as a .zip file</CardDescription></div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div><Label>Download Configuration</Label><p className="text-sm text-muted-foreground">Includes backup jobs, schedules, retention policies, storage backends, notification channels, and all settings</p></div>
               <Button variant="outline" className="gap-2" onClick={handleExportConfig} disabled={exporting}>
                 <Download className="h-4 w-4" />{exporting ? "Exporting..." : "Export .zip"}
+              </Button>
+            </div>
+            <Separator className="bg-border" />
+            <div className="flex items-center justify-between">
+              <div><Label>Import Configuration</Label><p className="text-sm text-muted-foreground">Restore settings from a previously exported .zip file. Existing entries with the same IDs will be overwritten.</p></div>
+              <input ref={fileInputRef} type="file" accept=".zip" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) setConfirmImport(f); }} />
+              <Button variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+                <Upload className="h-4 w-4" />{importing ? "Importing..." : "Import .zip"}
               </Button>
             </div>
           </CardContent>
@@ -369,6 +407,19 @@ export default function Settings() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => resetMut.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Reset</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!confirmImport} onOpenChange={(open) => { if (!open) { setConfirmImport(null); if (fileInputRef.current) fileInputRef.current.value = ""; } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import Configuration?</AlertDialogTitle>
+            <AlertDialogDescription>This will merge the uploaded config into your current setup. Existing items with matching IDs will be overwritten. This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (confirmImport) handleImportConfig(confirmImport); setConfirmImport(null); }}>Import</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
