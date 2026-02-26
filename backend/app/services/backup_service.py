@@ -172,6 +172,16 @@ class BackupService:
             # 8. Notify
             notification_service.notify_event("success", job.name, f"Backup completed: {size_str}")
 
+            # 9. Apply retention policy if one is linked to this job
+            if job.retention_id:
+                try:
+                    from app.services.rotation_service import rotation_service
+                    rotation_service.apply_policy(job.retention_id)
+                    self._log(db, "info", job.name, "Retention policy applied after backup")
+                except Exception as ret_exc:
+                    logger.warning("Retention cleanup failed after backup: %s", ret_exc)
+                    self._log(db, "warning", job.name, f"Retention cleanup failed: {ret_exc}")
+
         except Exception as exc:
             logger.exception("Backup job %d failed", job_id)
             if record:
