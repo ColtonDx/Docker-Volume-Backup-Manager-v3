@@ -1,15 +1,26 @@
+import io
 import json
 import logging
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.config import settings as app_settings
 from app.database import get_db
-from app.models import Setting
+from app.models import (
+    BackupJob,
+    NotificationChannel,
+    RetentionPolicy,
+    Schedule,
+    Setting,
+    StorageBackend,
+)
 from app.schemas import SettingsBundle
 
 logger = logging.getLogger(__name__)
@@ -91,3 +102,84 @@ def reset_settings(db: Session = Depends(get_db)):
     db.query(Setting).delete(synchronize_session=False)
     db.commit()
     return get_settings(db)
+
+
+@router.get("/export")
+def export_config(db: Session = Depends(get_db)):
+    """Export all configuration as a downloadable .zip containing JSON files."""
+
+    def _rows_to_dicts(rows, columns):
+        out = []
+        for r in rows:
+            d = {}
+            for c in columns:
+                val = getattr(r, c, None)
+                if isinstance(val, datetime):
+                    val = val.isoformat()
+                d[c] = val
+            out.append(d)
+        return out
+
+    # Collect all config tables
+    settings_rows = db.query(Setting).all()
+    settings_dict = {}
+    for row in settings_rows:
+        try:
+            settings_dict[row.key] = json.loads(row.value) if row.value is not None else None
+        except (json.JSONDecodeError, TypeError):
+            settings_dict[row.key] = row.value
+
+    storages = _rows_to_dicts(
+        db.query(StorageBackend).all(),
+        ["id", "name", "type", "config_json", "created_at", "updated_at"],
+    )
+
+    schedules = _rows_to_dicts(
+        db.query(Schedule).all(),
+        ["id", "name", "cron", "description", "enabled", "created_at", "updated_at"],
+    )
+
+    retention_policies = _rows_to_dicts(
+        db.query(RetentionPolicy).all(),
+        ["id", "name", "description", "retention_days", "min_backups", "max_backups", "created_at", "updated_at"],
+    )
+
+    jobs = _rows_to_dicts(
+        db.query(BackupJob).all(),
+        ["id", "name", "storage_id", "schedule_id", "retention_id", "enabled", "created_at", "updated_at"],
+    )
+
+    notifications = _rows_to_dicts(
+        db.query(NotificationChannel).all(),
+        ["id", "name", "type", "config_json", "events_json", "enabled", "created_at", "updated_at"],
+    )
+
+    # Build zip in memory
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("settings.json", json.dumps(settings_dict, indent=2))
+        zf.writestr("storage_backends.json", json.dumps(storages, indent=2))
+        zf.writestr("schedules.json", json.dumps(schedules, indent=2))
+        zf.writestr("retention_policies.json", json.dumps(retention_policies, indent=2))
+        zf.writestr("backup_jobs.json", json.dumps(jobs, indent=2))
+        zf.writestr("notification_channels.json", json.dumps(notifications, indent=2))
+        zf.writestr(
+            "metadata.json",
+            json.dumps(
+                {
+                    "app_version": app_settings.APP_VERSION,
+                    "exported_at": datetime.now(timezone.utc).isoformat(),
+                },
+                indent=2,
+            ),
+        )
+    buf.seek(0)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"backup_buddy_config_{timestamp}.zip"
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

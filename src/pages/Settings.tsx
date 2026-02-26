@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check } from "lucide-react";
+import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check, Download } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -52,6 +52,34 @@ export default function Settings() {
     onSuccess: () => { toast.success("Logs cleared"); queryClient.invalidateQueries({ queryKey: ["logs"] }); },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  const [exporting, setExporting] = useState(false);
+  const handleExportConfig = async () => {
+    setExporting(true);
+    try {
+      const token = sessionStorage.getItem("dvbm_token");
+      const res = await fetch("/api/settings/export", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="(.+)"/);
+      a.download = match ? match[1] : "backup_buddy_config.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Config exported");
+    } catch (err: any) {
+      toast.error(err.message || "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (isLoading) return <div className="text-center text-muted-foreground py-12">Loading settings...</div>;
 
@@ -290,6 +318,23 @@ export default function Settings() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-border animate-fade-in">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Download className="h-5 w-5 text-primary" /></div>
+              <div><CardTitle className="text-lg">Config Backup</CardTitle><CardDescription>Export all jobs, schedules, storages, notifications and settings as a .zip file</CardDescription></div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div><Label>Download Configuration</Label><p className="text-sm text-muted-foreground">Includes backup jobs, schedules, retention policies, storage backends, notification channels, and all settings</p></div>
+              <Button variant="outline" className="gap-2" onClick={handleExportConfig} disabled={exporting}>
+                <Download className="h-4 w-4" />{exporting ? "Exporting..." : "Export .zip"}
+              </Button>
             </div>
           </CardContent>
         </Card>
