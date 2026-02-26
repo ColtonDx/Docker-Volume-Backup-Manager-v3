@@ -162,10 +162,11 @@
 }
 
 /* ================================================
-   CYBERPUNK THEME — fonts, textures, scanlines, neon
+   CYBERPUNK + SYNTHWAVE — shared structural effects
+   (fonts, scanlines, clipped corners, layout treatments)
    ================================================ */
 
-/* -- Font overrides -- */
+/* -- Font overrides (shared) -- */
 [data-theme="cyberpunk"] body,
 [data-theme="cyberpunk"] h1,
 [data-theme="cyberpunk"] h2,
@@ -180,21 +181,40 @@
 [data-theme="cyberpunk"] span,
 [data-theme="cyberpunk"] p,
 [data-theme="cyberpunk"] a,
-[data-theme="cyberpunk"] div {
+[data-theme="cyberpunk"] div,
+[data-theme="synthwave"] body,
+[data-theme="synthwave"] h1,
+[data-theme="synthwave"] h2,
+[data-theme="synthwave"] h3,
+[data-theme="synthwave"] h4,
+[data-theme="synthwave"] h5,
+[data-theme="synthwave"] h6,
+[data-theme="synthwave"] [class*="CardTitle"],
+[data-theme="synthwave"] [class*="PageHeader"],
+[data-theme="synthwave"] button,
+[data-theme="synthwave"] label,
+[data-theme="synthwave"] span,
+[data-theme="synthwave"] p,
+[data-theme="synthwave"] a,
+[data-theme="synthwave"] div {
   font-family: 'Rajdhani', 'Inter', sans-serif;
   letter-spacing: 0.02em;
 }
 
 [data-theme="cyberpunk"] h1,
 [data-theme="cyberpunk"] h2,
-[data-theme="cyberpunk"] h3 {
+[data-theme="cyberpunk"] h3,
+[data-theme="synthwave"] h1,
+[data-theme="synthwave"] h2,
+[data-theme="synthwave"] h3 {
   font-family: 'Orbitron', 'Rajdhani', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
-/* -- Scanline overlay on the entire page -- */
-[data-theme="cyberpunk"]::after {
+/* -- Scanline overlay (shared) -- */
+[data-theme="cyberpunk"]::after,
+[data-theme="synthwave"]::after {
   content: '';
   position: fixed;
   inset: 0;
@@ -210,6 +230,71 @@
   mix-blend-mode: overlay;
 }
 
+/* -- Clipped corners on buttons (shared) -- */
+[data-theme="cyberpunk"] button[class*="bg-primary"],
+[data-theme="cyberpunk"] [role="button"][class*="bg-primary"],
+[data-theme="synthwave"] button[class*="bg-primary"],
+[data-theme="synthwave"] [role="button"][class*="bg-primary"] {
+  clip-path: polygon(0 4px, 4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px));
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+/* -- Input bottom-border styling (shared) -- */
+[data-theme="cyberpunk"] input,
+[data-theme="cyberpunk"] textarea,
+[data-theme="cyberpunk"] select,
+[data-theme="cyberpunk"] [role="combobox"],
+[data-theme="synthwave"] input,
+[data-theme="synthwave"] textarea,
+[data-theme="synthwave"] select,
+[data-theme="synthwave"] [role="combobox"] {
+  border-radius: 2px;
+  transition: border-color 0.2s;
+}
+
+/* -- Table header styling (shared) -- */
+[data-theme="cyberpunk"] th,
+[data-theme="synthwave"] th {
+  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.7rem;
+}
+
+/* -- Badge clipped corners (shared) -- */
+[data-theme="cyberpunk"] [class*="Badge"],
+[data-theme="cyberpunk"] [class*="badge"],
+[data-theme="synthwave"] [class*="Badge"],
+[data-theme="synthwave"] [class*="badge"] {
+  clip-path: polygon(0 3px, 3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 0 calc(100% - 3px));
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* -- Scrollbar size (shared) -- */
+[data-theme="cyberpunk"] ::-webkit-scrollbar,
+[data-theme="synthwave"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+/* -- Popover/dropdown clipped corners (shared) -- */
+[data-theme="cyberpunk"] [data-radix-popper-content-wrapper] > div,
+[data-theme="synthwave"] [data-radix-popper-content-wrapper] > div {
+  clip-path: polygon(
+    0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px,
+    100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px)
+  );
+}
+
+/* ================================================
+   CYBERPUNK — neon-yellow colour-specific effects
+   ================================================ */
+
 /* -- Noise texture on cards -- */
 [data-theme="cyberpunk"] .glass-panel {
   background-image:
@@ -224,7 +309,6 @@
   );
 }
 
-/* -- Neon glow on primary elements -- */
 [data-theme="cyberpunk"] .glow-primary {
   box-shadow:
     0 0 8px hsl(54 96% 60% / 0.5),
@@ -232,36 +316,26 @@
     0 0 48px hsl(54 96% 60% / 0.1);
 }
 
-/* -- Sidebar gets a subtle left-edge neon bar -- */
 [data-theme="cyberpunk"] [data-sidebar] {
   border-right: 2px solid hsl(54 96% 60% / 0.25);
   box-shadow: inset -1px 0 12px hsl(54 96% 60% / 0.05);
 }
 
-/* -- Active sidebar link neon accent -- */
 [data-theme="cyberpunk"] [data-sidebar] a.bg-primary\/10 {
   border-left: 3px solid hsl(54 96% 60% / 0.8);
   box-shadow: inset 4px 0 8px hsl(54 96% 60% / 0.1);
 }
 
-/* -- Buttons: clipped corners + glow -- */
 [data-theme="cyberpunk"] button[class*="bg-primary"],
 [data-theme="cyberpunk"] [role="button"][class*="bg-primary"] {
-  clip-path: polygon(0 4px, 4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px));
   box-shadow: 0 0 10px hsl(54 96% 60% / 0.3);
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.1em;
 }
 
-/* -- Input fields: bottom-border neon accent -- */
 [data-theme="cyberpunk"] input,
 [data-theme="cyberpunk"] textarea,
 [data-theme="cyberpunk"] select,
 [data-theme="cyberpunk"] [role="combobox"] {
-  border-radius: 2px;
   border-bottom: 2px solid hsl(54 96% 60% / 0.3);
-  transition: border-color 0.2s;
 }
 [data-theme="cyberpunk"] input:focus,
 [data-theme="cyberpunk"] textarea:focus,
@@ -271,19 +345,13 @@
   box-shadow: 0 2px 8px hsl(54 96% 60% / 0.15);
 }
 
-/* -- Tables: neon row borders -- */
 [data-theme="cyberpunk"] tr {
   border-bottom: 1px solid hsl(54 96% 60% / 0.08);
 }
 [data-theme="cyberpunk"] th {
-  font-family: 'Orbitron', 'Rajdhani', sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 0.7rem;
   color: hsl(54 96% 60% / 0.7);
 }
 
-/* -- Status dots: cyberpunk glow -- */
 [data-theme="cyberpunk"] .status-dot-active {
   box-shadow: 0 0 6px hsl(160 90% 42% / 0.8);
 }
@@ -294,21 +362,6 @@
   box-shadow: 0 0 6px hsl(54 96% 60% / 0.8);
 }
 
-/* -- Badge/chip clipped corners -- */
-[data-theme="cyberpunk"] [class*="Badge"],
-[data-theme="cyberpunk"] [class*="badge"] {
-  clip-path: polygon(0 3px, 3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 0 calc(100% - 3px));
-  border-radius: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
-}
-
-/* -- Scrollbar styling -- */
-[data-theme="cyberpunk"] ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
 [data-theme="cyberpunk"] ::-webkit-scrollbar-track {
   background: hsl(230 25% 4%);
 }
@@ -320,7 +373,6 @@
   background: hsl(54 96% 60% / 0.5);
 }
 
-/* -- Text gradient override for cyberpunk -- */
 [data-theme="cyberpunk"] .text-gradient {
   background: linear-gradient(90deg, hsl(54 96% 60%), hsl(340 100% 55%));
   -webkit-background-clip: text;
@@ -328,13 +380,101 @@
   background-clip: text;
 }
 
-/* -- Popover/dropdown: clipped + border glow -- */
 [data-theme="cyberpunk"] [data-radix-popper-content-wrapper] > div {
-  clip-path: polygon(
-    0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px,
-    100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px)
-  );
   border: 1px solid hsl(54 96% 60% / 0.2);
+}
+
+/* ================================================
+   SYNTHWAVE — neon-pink / sunset colour-specific effects
+   ================================================ */
+
+/* -- Noise texture on cards (purple-tinted) -- */
+[data-theme="synthwave"] .glass-panel {
+  background-image:
+    linear-gradient(135deg, hsl(265 35% 11% / 0.9), hsl(265 35% 7% / 0.95)),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  border-color: hsl(320 100% 60% / 0.15);
+  border-width: 1px;
+  backdrop-filter: blur(12px);
+  clip-path: polygon(
+    0 8px, 8px 0, calc(100% - 8px) 0, 100% 8px,
+    100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px)
+  );
+}
+
+[data-theme="synthwave"] .glow-primary {
+  box-shadow:
+    0 0 8px hsl(320 100% 60% / 0.5),
+    0 0 24px hsl(320 100% 60% / 0.25),
+    0 0 48px hsl(320 100% 60% / 0.1);
+}
+
+[data-theme="synthwave"] [data-sidebar] {
+  border-right: 2px solid hsl(320 100% 60% / 0.25);
+  box-shadow: inset -1px 0 12px hsl(320 100% 60% / 0.05);
+}
+
+[data-theme="synthwave"] [data-sidebar] a.bg-primary\/10 {
+  border-left: 3px solid hsl(320 100% 60% / 0.8);
+  box-shadow: inset 4px 0 8px hsl(320 100% 60% / 0.1);
+}
+
+[data-theme="synthwave"] button[class*="bg-primary"],
+[data-theme="synthwave"] [role="button"][class*="bg-primary"] {
+  box-shadow: 0 0 10px hsl(320 100% 60% / 0.3);
+}
+
+[data-theme="synthwave"] input,
+[data-theme="synthwave"] textarea,
+[data-theme="synthwave"] select,
+[data-theme="synthwave"] [role="combobox"] {
+  border-bottom: 2px solid hsl(320 100% 60% / 0.3);
+}
+[data-theme="synthwave"] input:focus,
+[data-theme="synthwave"] textarea:focus,
+[data-theme="synthwave"] select:focus,
+[data-theme="synthwave"] [role="combobox"]:focus {
+  border-bottom-color: hsl(320 100% 60% / 0.8);
+  box-shadow: 0 2px 8px hsl(320 100% 60% / 0.15);
+}
+
+[data-theme="synthwave"] tr {
+  border-bottom: 1px solid hsl(320 100% 60% / 0.08);
+}
+[data-theme="synthwave"] th {
+  color: hsl(320 100% 60% / 0.7);
+}
+
+[data-theme="synthwave"] .status-dot-active {
+  box-shadow: 0 0 6px hsl(185 90% 50% / 0.8);
+}
+[data-theme="synthwave"] .status-dot-error {
+  box-shadow: 0 0 6px hsl(0 80% 55% / 0.8);
+}
+[data-theme="synthwave"] .status-dot-warning {
+  box-shadow: 0 0 6px hsl(35 95% 55% / 0.8);
+}
+
+[data-theme="synthwave"] ::-webkit-scrollbar-track {
+  background: hsl(265 35% 5%);
+}
+[data-theme="synthwave"] ::-webkit-scrollbar-thumb {
+  background: hsl(320 100% 60% / 0.25);
+  border-radius: 0;
+}
+[data-theme="synthwave"] ::-webkit-scrollbar-thumb:hover {
+  background: hsl(320 100% 60% / 0.5);
+}
+
+[data-theme="synthwave"] .text-gradient {
+  background: linear-gradient(90deg, hsl(320 100% 60%), hsl(185 90% 50%));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="synthwave"] [data-radix-popper-content-wrapper] > div {
+  border: 1px solid hsl(320 100% 60% / 0.2);
 }
 
 /* ================================================
@@ -508,5 +648,57 @@
   --chart-3: 185 90% 48%;
   --chart-4: 160 90% 42%;
   --chart-5: 270 80% 60%;
+  --radius: 0.15rem;
+}
+
+/* ---------- Synthwave ---------- */
+[data-theme="synthwave"] {
+  --primary: 320 100% 60%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 185 90% 50%;
+  --accent-foreground: 0 0% 0%;
+  --ring: 320 100% 60%;
+  --sidebar-primary: 320 100% 60%;
+  --sidebar-ring: 320 100% 60%;
+  --chart-1: 320 100% 60%;
+}
+.dark[data-theme="synthwave"],
+[data-theme="synthwave"].dark {
+  --background: 265 35% 5%;
+  --foreground: 280 20% 92%;
+  --card: 265 35% 8%;
+  --card-foreground: 280 20% 92%;
+  --popover: 265 35% 10%;
+  --popover-foreground: 280 20% 92%;
+  --primary: 320 100% 60%;
+  --primary-foreground: 265 35% 5%;
+  --secondary: 265 25% 15%;
+  --secondary-foreground: 280 20% 92%;
+  --muted: 265 25% 12%;
+  --muted-foreground: 265 15% 48%;
+  --accent: 185 90% 50%;
+  --accent-foreground: 265 35% 5%;
+  --destructive: 0 80% 55%;
+  --destructive-foreground: 280 20% 92%;
+  --success: 185 90% 50%;
+  --success-foreground: 265 35% 5%;
+  --warning: 35 95% 55%;
+  --warning-foreground: 265 35% 5%;
+  --border: 265 30% 18%;
+  --input: 265 30% 15%;
+  --ring: 320 100% 60%;
+  --sidebar-background: 265 35% 6%;
+  --sidebar-foreground: 265 15% 55%;
+  --sidebar-primary: 320 100% 60%;
+  --sidebar-primary-foreground: 265 35% 5%;
+  --sidebar-accent: 265 25% 12%;
+  --sidebar-accent-foreground: 280 20% 92%;
+  --sidebar-border: 265 30% 18%;
+  --sidebar-ring: 320 100% 60%;
+  --chart-1: 320 100% 60%;
+  --chart-2: 185 90% 50%;
+  --chart-3: 35 95% 55%;
+  --chart-4: 270 80% 60%;
+  --chart-5: 54 96% 60%;
   --radius: 0.15rem;
 }
