@@ -19,6 +19,8 @@ services:
     environment:
       # REQUIRED: Set a password for the web UI
       - BACKUP_BUDDY_PASSWORD=changeme
+      # Optional: custom instance name shown in the sidebar
+      # - APP_NAME=Docker Volume Backup Manager
       # Optional: custom JWT secret (auto-generated if not set)
       # - JWT_SECRET=my-super-secret-key
       # Optional: Docker label key to match jobs to containers

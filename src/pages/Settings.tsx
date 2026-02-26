@@ -170,16 +170,11 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Instance Name</Label>
-                <Input className="bg-background border-border" value={(form.instance_name as string) || ""} onChange={(e) => set("instance_name", e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Default Timezone</Label>
-                <Select value={(form.timezone as string) || "UTC"} onValueChange={(v) => set("timezone", v)}>
-                  <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-popover border-border max-h-64">
+            <div className="space-y-2">
+              <Label>Default Timezone</Label>
+              <Select value={(form.timezone as string) || "UTC"} onValueChange={(v) => set("timezone", v)}>
+                <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-popover border-border max-h-64">
                     <SelectItem value="UTC">UTC</SelectItem>
                     <SelectItem value="US/Eastern">US / Eastern (ET)</SelectItem>
                     <SelectItem value="US/Central">US / Central (CT)</SelectItem>
@@ -218,17 +213,9 @@ export default function Settings() {
                     <SelectItem value="Australia/Perth">Australia / Perth (AWST)</SelectItem>
                     <SelectItem value="Australia/Adelaide">Australia / Adelaide (ACST)</SelectItem>
                     <SelectItem value="Pacific/Auckland">Pacific / Auckland (NZST)</SelectItem>
-                    <SelectItem value="Pacific/Fiji">Pacific / Fiji (FJT)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Maintenance Mode</Label>
-                <p className="text-sm text-muted-foreground">Pause all backup operations</p>
-              </div>
-              <Switch checked={!!form.maintenance_mode} onCheckedChange={(v) => set("maintenance_mode", v)} />
+                  <SelectItem value="Pacific/Fiji">Pacific / Fiji (FJT)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>

@@ -29,9 +29,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 
 # Default settings values
 DEFAULTS: dict[str, Any] = {
-    "instance_name": "Backup Buddy",
     "timezone": "utc",
-    "maintenance_mode": False,
     "rclone_enabled": False,
     "rclone_binary": "/usr/bin/rclone",
     "rclone_config": "/root/.config/rclone/rclone.conf",
@@ -63,6 +61,8 @@ def get_settings(db: Session = Depends(get_db)):
             result[row.key] = json.loads(row.value) if row.value is not None else None
         except (json.JSONDecodeError, TypeError):
             result[row.key] = row.value
+    # Instance name is always derived from the APP_NAME env var (read-only)
+    result["instance_name"] = app_settings.APP_NAME
     return SettingsBundle(settings=result)
 
 

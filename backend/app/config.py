@@ -16,7 +16,7 @@ def _read_version() -> str:
 class Settings:
     """Application settings loaded from environment variables."""
 
-    APP_NAME: str = os.getenv("APP_NAME", "Backup Buddy")
+    APP_NAME: str = os.getenv("APP_NAME", "Docker Volume Backup Manager")
     APP_VERSION: str = _read_version()
 
     # Auth

@@ -12,6 +12,8 @@ import {
   ArchiveRestore
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
+import { fetchSettings } from "@/api";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -46,6 +48,8 @@ const systemNavItems = [
 
 export function AppSidebar() {
   const { logout } = useAuth();
+  const { data: settingsData } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
+  const instanceName = (settingsData?.settings as Record<string, unknown>)?.instance_name as string || "Docker Volume Backup Manager";
   
   return (
     <Sidebar className="border-r border-border">
@@ -55,8 +59,7 @@ export function AppSidebar() {
             <Container className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="font-semibold text-foreground text-sm">Docker Volume</h1>
-            <p className="text-xs text-muted-foreground">Backup Manager</p>
+            <h1 className="font-semibold text-foreground text-sm leading-tight">{instanceName}</h1>
           </div>
         </div>
       </SidebarHeader>
