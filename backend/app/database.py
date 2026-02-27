@@ -39,7 +39,6 @@ def _migrate(eng):
     migrations = [
         ("backup_jobs", "label_key", "VARCHAR DEFAULT 'backup-buddy.job' NOT NULL"),
         ("backup_jobs", "label_value", "VARCHAR DEFAULT '' NOT NULL"),
-        ("backup_jobs", "uptime_kuma_monitor_id", "INTEGER"),
     ]
 
     with eng.connect() as conn:

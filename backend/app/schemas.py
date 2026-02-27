@@ -137,7 +137,6 @@ class BackupJobBase(BaseModel):
     storage_id: int
     schedule_id: int | None = None
     retention_id: int | None = None
-    uptime_kuma_monitor_id: int | None = None
     enabled: bool = True
 
 
@@ -152,7 +151,6 @@ class BackupJobUpdate(BaseModel):
     storage_id: int | None = None
     schedule_id: int | None = None
     retention_id: int | None = None
-    uptime_kuma_monitor_id: int | None = None
     enabled: bool | None = None
 
 
@@ -163,7 +161,6 @@ class BackupJobOut(BaseModel):
     label_value: str = ""
     label: str = ""  # computed: "{label_key}={label_value}"
     enabled: bool
-    uptime_kuma_monitor_id: int | None = None
     storage: StorageBackendOut | None = None
     schedule: ScheduleOut | None = None
     retention: RetentionPolicyOut | None = None

@@ -56,7 +56,6 @@ def _enrich_job(job: BackupJob, db: Session) -> dict:
         "label_value": label_value,
         "label": f"{label_key}={label_value}",
         "enabled": job.enabled,
-        "uptime_kuma_monitor_id": job.uptime_kuma_monitor_id,
         "storage": job.storage,
         "schedule": job.schedule,
         "retention": job.retention,
@@ -92,7 +91,6 @@ def create_job(body: BackupJobCreate, db: Session = Depends(get_db)):
         storage_id=body.storage_id,
         schedule_id=body.schedule_id,
         retention_id=body.retention_id,
-        uptime_kuma_monitor_id=body.uptime_kuma_monitor_id,
         enabled=body.enabled,
     )
     db.add(job)

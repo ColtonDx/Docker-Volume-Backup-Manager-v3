@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Database, CheckCircle, AlertTriangle, Clock, Activity, HardDrive, Timer, Calendar, FileText,
+  ArrowLeft, Database, CheckCircle, AlertTriangle, Clock, Activity, HardDrive, Timer, Calendar, FileText, Pencil,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -87,9 +87,14 @@ export default function JobDetail() {
         title={job.name}
         description={`${job.label} — ${job.containers?.length ?? 0} container(s) matched`}
         action={
-          <Button variant="outline" className="gap-2" onClick={() => navigate("/jobs")}>
-            <ArrowLeft className="h-4 w-4" /> Back to Jobs
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => navigate(`/jobs?edit=${job.id}`)}>
+              <Pencil className="h-4 w-4" /> Edit Job
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={() => navigate("/jobs")}>
+              <ArrowLeft className="h-4 w-4" /> Back to Jobs
+            </Button>
+          </div>
         }
       />
 

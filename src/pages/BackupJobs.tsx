@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, MoreVertical, Play, Pause, Trash2, Edit, Database, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -24,8 +24,8 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { fetchJobs, createJob, updateJob, deleteJob, runJob, pauseJob, resumeJob, fetchStorages, fetchSchedules, fetchRotations, fetchSettings, fetchUptimeKumaMonitors } from "@/api";
-import type { BackupJob, UptimeKumaMonitor } from "@/api/types";
+import { fetchJobs, createJob, updateJob, deleteJob, runJob, pauseJob, resumeJob, fetchStorages, fetchSchedules, fetchRotations, fetchSettings } from "@/api";
+import type { BackupJob } from "@/api/types";
 
 type SortKey = "name" | "label" | "containers" | "storage" | "schedule" | "status" | "last_run";
 type SortDir = "asc" | "desc";
@@ -33,10 +33,11 @@ type SortDir = "asc" | "desc";
 export default function BackupJobs() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [editingJob, setEditingJob] = useState<BackupJob | null>(null);
-  const [formData, setFormData] = useState({ name: "", label_key: "", label_value: "", storage_id: "", schedule_id: "", retention_id: "", uptime_kuma_monitor_id: "" });
+  const [formData, setFormData] = useState({ name: "", label_key: "", label_value: "", storage_id: "", schedule_id: "", retention_id: "" });
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -46,13 +47,18 @@ export default function BackupJobs() {
   const { data: rotations = [] } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
   const { data: settingsData } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
   const defaultLabelKey = (settingsData?.settings as Record<string, unknown> | undefined)?.default_label_key as string || "backup-buddy.job";
-  const kumaEnabled = !!(settingsData?.settings as Record<string, unknown> | undefined)?.uptime_kuma_enabled;
-  const { data: kumaMonitorsData } = useQuery({
-    queryKey: ["uptime-kuma-monitors"],
-    queryFn: fetchUptimeKumaMonitors,
-    enabled: kumaEnabled,
-  });
-  const kumaMonitors: UptimeKumaMonitor[] = kumaMonitorsData?.monitors ?? [];
+
+  // Handle ?edit=<id> from JobDetail page
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (editId && jobs.length > 0) {
+      const job = jobs.find((j) => j.id === Number(editId));
+      if (job) {
+        openEdit(job);
+      }
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, jobs]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -101,7 +107,6 @@ export default function BackupJobs() {
       storage_id: Number(data.storage_id),
       schedule_id: data.schedule_id ? Number(data.schedule_id) : null,
       retention_id: data.retention_id ? Number(data.retention_id) : null,
-      uptime_kuma_monitor_id: data.uptime_kuma_monitor_id ? Number(data.uptime_kuma_monitor_id) : null,
     }),
     onSuccess: (_, data) => { toast.success(`Job "${data.name}" created`); invalidate(); },
     onError: (err: Error) => toast.error(err.message),
@@ -115,7 +120,6 @@ export default function BackupJobs() {
       storage_id: Number(data.storage_id),
       schedule_id: data.schedule_id ? Number(data.schedule_id) : null,
       retention_id: data.retention_id ? Number(data.retention_id) : null,
-      uptime_kuma_monitor_id: data.uptime_kuma_monitor_id ? Number(data.uptime_kuma_monitor_id) : null,
     }),
     onSuccess: (_, { data }) => { toast.success(`Job "${data.name}" updated`); invalidate(); },
     onError: (err: Error) => toast.error(err.message),
@@ -147,7 +151,7 @@ export default function BackupJobs() {
 
   const openCreate = () => {
     setEditingJob(null);
-    setFormData({ name: "", label_key: defaultLabelKey, label_value: "", storage_id: "", schedule_id: "", retention_id: "", uptime_kuma_monitor_id: "" });
+    setFormData({ name: "", label_key: defaultLabelKey, label_value: "", storage_id: "", schedule_id: "", retention_id: "" });
     setDialogOpen(true);
   };
 
@@ -160,7 +164,6 @@ export default function BackupJobs() {
       storage_id: job.storage?.id?.toString() || "",
       schedule_id: job.schedule?.id?.toString() || "",
       retention_id: job.retention?.id?.toString() || "",
-      uptime_kuma_monitor_id: job.uptime_kuma_monitor_id?.toString() || "",
     });
     setDialogOpen(true);
   };
@@ -251,21 +254,6 @@ export default function BackupJobs() {
                     </SelectContent>
                   </Select>
                 </div>
-                {kumaEnabled && (
-                  <div className="space-y-2">
-                    <Label>Uptime Kuma Monitor</Label>
-                    <Select value={formData.uptime_kuma_monitor_id || "__none__"} onValueChange={(v) => setFormData((p) => ({ ...p, uptime_kuma_monitor_id: v === "__none__" ? "" : v }))}>
-                      <SelectTrigger className="bg-background border-border"><SelectValue placeholder="None (no maintenance window)" /></SelectTrigger>
-                      <SelectContent className="bg-popover border-border">
-                        <SelectItem value="__none__">None (no maintenance window)</SelectItem>
-                        {kumaMonitors.map((m) => (
-                          <SelectItem key={m.id} value={m.id.toString()}>{m.name} (ID: {m.id})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">A maintenance window will be created in Uptime Kuma for this monitor while the backup runs</p>
-                  </div>
-                )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>

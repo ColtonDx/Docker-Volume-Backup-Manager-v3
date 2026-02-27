@@ -27,8 +27,6 @@ import type {
   StorageBackendUpdate,
   TestResponse,
   TokenResponse,
-  UptimeKumaTestResponse,
-  UptimeKumaMonitorsResponse,
 } from "./types";
 
 // Re-export for convenience
@@ -127,10 +125,3 @@ export const fetchSettings = () => api.get<SettingsBundle>("/settings");
 export const updateSettings = (settings: Record<string, unknown>) => api.put<SettingsBundle>("/settings", { settings });
 export const resetSettings = () => api.post<SettingsBundle>("/settings/reset");
 
-// ---- Uptime Kuma --------------------------------------------------------
-export const testUptimeKuma = (params?: { url?: string; username?: string; password?: string }) =>
-  api.post<UptimeKumaTestResponse>("/settings/uptime-kuma/test", params);
-export const fetchUptimeKumaMonitors = () =>
-  api.get<UptimeKumaMonitorsResponse>("/settings/uptime-kuma/monitors");
-export const fetchUptimeKumaMonitorsInline = (params: { url: string; username: string; password: string }) =>
-  api.post<UptimeKumaMonitorsResponse>("/settings/uptime-kuma/monitors", params);
