@@ -29,6 +29,9 @@ def get_storage(storage_id: int, db: Session = Depends(get_db)):
 
 @router.post("", response_model=StorageBackendOut, status_code=201)
 def create_storage(body: StorageBackendCreate, db: Session = Depends(get_db)):
+    existing = db.query(StorageBackend).filter(StorageBackend.name == body.name).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"A storage with the name '{body.name}' already exists")
     storage = StorageBackend(
         name=body.name,
         type=body.type,
@@ -46,6 +49,12 @@ def update_storage(storage_id: int, body: StorageBackendUpdate, db: Session = De
     if not storage:
         raise HTTPException(status_code=404, detail="Storage backend not found")
     if body.name is not None:
+        existing = db.query(StorageBackend).filter(
+            StorageBackend.name == body.name,
+            StorageBackend.id != storage_id,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"A storage with the name '{body.name}' already exists")
         storage.name = body.name
     if body.type is not None:
         storage.type = body.type
