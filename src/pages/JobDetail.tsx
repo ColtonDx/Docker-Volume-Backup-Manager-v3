@@ -36,14 +36,14 @@ export default function JobDetail() {
   const navigate = useNavigate();
   const jobId = Number(id);
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, isError, error } = useQuery({
     queryKey: ["job-stats", jobId],
     queryFn: () => fetchJobStats(jobId),
     enabled: !isNaN(jobId),
     refetchInterval: 30000,
   });
 
-  if (isLoading || !stats) {
+  if (isLoading) {
     return (
       <div>
         <PageHeader
@@ -56,6 +56,25 @@ export default function JobDetail() {
           }
         />
         <div className="text-center text-muted-foreground py-12">Loading job details...</div>
+      </div>
+    );
+  }
+
+  if (isError || !stats) {
+    return (
+      <div>
+        <PageHeader
+          title="Job Details"
+          description="Failed to load"
+          action={
+            <Button variant="outline" className="gap-2" onClick={() => navigate("/jobs")}>
+              <ArrowLeft className="h-4 w-4" /> Back to Jobs
+            </Button>
+          }
+        />
+        <div className="text-center text-destructive py-12">
+          {error instanceof Error ? error.message : "Could not load job details. The job may have been deleted."}
+        </div>
       </div>
     );
   }

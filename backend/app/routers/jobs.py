@@ -167,8 +167,8 @@ def get_job_stats(job_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    # 30-day success rate
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    # 30-day success rate  (SQLite returns naive datetimes, so compare with naive UTC)
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     recent_records = [r for r in all_records if r.started_at and r.started_at >= thirty_days_ago]
     total_recent = len(recent_records)
     success_recent = sum(1 for r in recent_records if r.status == "success")
@@ -183,7 +183,7 @@ def get_job_stats(job_id: int, db: Session = Depends(get_db)):
         avg_duration = round(sum(durations) / len(durations), 1)
 
     # Error count in last 24h
-    one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+    one_day_ago = datetime.utcnow() - timedelta(days=1)
     errors_24h = sum(
         1 for r in all_records
         if r.started_at and r.started_at >= one_day_ago and r.status in ("error", "warning")
