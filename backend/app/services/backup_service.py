@@ -75,14 +75,15 @@ class BackupService:
             self._log(db, "info", job.name, f"Backup job '{job.name}' started")
 
             # 1. Find matching containers
-            label_key = settings.DOCKER_LABEL_KEY
-            containers = docker_service.find_containers_by_label(label_key, job.name)
+            label_key = job.label_key or settings.DOCKER_LABEL_KEY
+            label_value = job.label_value or job.name
+            containers = docker_service.find_containers_by_label(label_key, label_value)
             container_ids = [c["id"] for c in containers]
             container_names = [c["name"] for c in containers]
 
             if not containers:
                 raise RuntimeError(
-                    f"No containers matched label '{label_key}={job.name}'. "
+                    f"No containers matched label '{label_key}={label_value}'. "
                     "Ensure your containers have the correct label set."
                 )
 
@@ -263,8 +264,9 @@ class BackupService:
                 raise FileNotFoundError("No backup archive found for restore")
 
             # 2. Stop containers
-            label_key = settings.DOCKER_LABEL_KEY
-            containers = docker_service.find_containers_by_label(label_key, job_name)
+            label_key = getattr(job, "label_key", None) or settings.DOCKER_LABEL_KEY
+            label_value = getattr(job, "label_value", None) or job_name
+            containers = docker_service.find_containers_by_label(label_key, label_value)
             running_ids = [c["id"] for c in containers if c["status"] == "running"]
             stopped = docker_service.stop_containers(running_ids)
 

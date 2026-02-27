@@ -110,6 +110,8 @@ export interface RetentionPolicyUpdate {
 export interface BackupJob {
   id: number;
   name: string;
+  label_key: string;
+  label_value: string;
   label: string;
   enabled: boolean;
   storage: StorageBackend | null;
@@ -125,6 +127,8 @@ export interface BackupJob {
 
 export interface BackupJobCreate {
   name: string;
+  label_key?: string;
+  label_value?: string;
   storage_id: number;
   schedule_id?: number | null;
   retention_id?: number | null;
@@ -133,6 +137,8 @@ export interface BackupJobCreate {
 
 export interface BackupJobUpdate {
   name?: string;
+  label_key?: string;
+  label_value?: string;
   storage_id?: number;
   schedule_id?: number | null;
   retention_id?: number | null;

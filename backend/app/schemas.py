@@ -132,6 +132,8 @@ class RetentionPolicyOut(RetentionPolicyBase):
 
 class BackupJobBase(BaseModel):
     name: str
+    label_key: str = "backup-buddy.job"
+    label_value: str = ""
     storage_id: int
     schedule_id: int | None = None
     retention_id: int | None = None
@@ -144,6 +146,8 @@ class BackupJobCreate(BackupJobBase):
 
 class BackupJobUpdate(BaseModel):
     name: str | None = None
+    label_key: str | None = None
+    label_value: str | None = None
     storage_id: int | None = None
     schedule_id: int | None = None
     retention_id: int | None = None
@@ -153,7 +157,9 @@ class BackupJobUpdate(BaseModel):
 class BackupJobOut(BaseModel):
     id: int
     name: str
-    label: str  # computed: "backup-buddy.job={name}"
+    label_key: str = "backup-buddy.job"
+    label_value: str = ""
+    label: str = ""  # computed: "{label_key}={label_value}"
     enabled: bool
     storage: StorageBackendOut | None = None
     schedule: ScheduleOut | None = None

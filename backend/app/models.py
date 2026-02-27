@@ -74,6 +74,8 @@ class BackupJob(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False, unique=True)
+    label_key = Column(String, nullable=False, default="backup-buddy.job")
+    label_value = Column(String, nullable=False, default="")
     storage_id = Column(Integer, ForeignKey("storage_backends.id"), nullable=False)
     schedule_id = Column(Integer, ForeignKey("schedules.id", ondelete="SET NULL"), nullable=True)
     retention_id = Column(Integer, ForeignKey("retention_policies.id"), nullable=True)

@@ -217,6 +217,12 @@ export default function Settings() {
                 </SelectContent>
               </Select>
             </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label>Default Docker Label Key</Label>
+              <Input className="bg-background border-border font-mono" value={(form.default_label_key as string) || "backup-buddy.job"} onChange={(e) => set("default_label_key", e.target.value)} placeholder="backup-buddy.job" />
+              <p className="text-xs text-muted-foreground">New backup jobs will use this as the default label key (left side of the <code>=</code>). Containers with <code>{(form.default_label_key as string) || "backup-buddy.job"}=&lt;value&gt;</code> will be matched.</p>
+            </div>
           </CardContent>
         </Card>
 

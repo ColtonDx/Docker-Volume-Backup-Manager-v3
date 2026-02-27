@@ -20,8 +20,9 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 
 def _enrich_job(job: BackupJob, db: Session) -> dict:
     """Add dynamic fields like matched containers, status, last/next run."""
-    label_key = "backup-buddy.job"
-    containers = docker_service.find_containers_by_label(label_key, job.name)
+    label_key = job.label_key or "backup-buddy.job"
+    label_value = job.label_value or job.name
+    containers = docker_service.find_containers_by_label(label_key, label_value)
     container_names = [c["name"] for c in containers]
 
     # Determine status from most recent backup record
@@ -51,7 +52,9 @@ def _enrich_job(job: BackupJob, db: Session) -> dict:
     return {
         "id": job.id,
         "name": job.name,
-        "label": f"backup-buddy.job={job.name}",
+        "label_key": label_key,
+        "label_value": label_value,
+        "label": f"{label_key}={label_value}",
         "enabled": job.enabled,
         "storage": job.storage,
         "schedule": job.schedule,
@@ -83,6 +86,8 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
 def create_job(body: BackupJobCreate, db: Session = Depends(get_db)):
     job = BackupJob(
         name=body.name,
+        label_key=body.label_key,
+        label_value=body.label_value or body.name,
         storage_id=body.storage_id,
         schedule_id=body.schedule_id,
         retention_id=body.retention_id,

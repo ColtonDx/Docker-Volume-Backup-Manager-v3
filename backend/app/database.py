@@ -24,7 +24,35 @@ def get_db():
 
 
 def init_db():
-    """Create all tables."""
+    """Create all tables and run lightweight migrations for new columns."""
     from app import models  # noqa: F401 – ensure models are imported
 
     Base.metadata.create_all(bind=engine)
+    _migrate(engine)
+
+
+def _migrate(eng):
+    """Add columns that may be missing from older schemas (SQLite-safe)."""
+    import logging
+    log = logging.getLogger(__name__)
+
+    migrations = [
+        ("backup_jobs", "label_key", "VARCHAR DEFAULT 'backup-buddy.job' NOT NULL"),
+        ("backup_jobs", "label_value", "VARCHAR DEFAULT '' NOT NULL"),
+    ]
+
+    with eng.connect() as conn:
+        for table, column, col_def in migrations:
+            # Check if column already exists
+            result = conn.execute(
+                __import__("sqlalchemy").text(f"PRAGMA table_info({table})")
+            )
+            existing_cols = {row[1] for row in result}
+            if column not in existing_cols:
+                conn.execute(
+                    __import__("sqlalchemy").text(
+                        f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"
+                    )
+                )
+                conn.commit()
+                log.info("Migration: added %s.%s", table, column)

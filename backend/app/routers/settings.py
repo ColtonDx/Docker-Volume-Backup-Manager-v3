@@ -30,6 +30,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 # Default settings values
 DEFAULTS: dict[str, Any] = {
     "timezone": "utc",
+    "default_label_key": "backup-buddy.job",
     "rclone_enabled": False,
     "rclone_binary": "/usr/bin/rclone",
     "rclone_config": "/root/.config/rclone/rclone.conf",
@@ -155,7 +156,7 @@ def export_config(db: Session = Depends(get_db)):
 
     jobs = _rows_to_dicts(
         db.query(BackupJob).all(),
-        ["id", "name", "storage_id", "schedule_id", "retention_id", "enabled", "created_at", "updated_at"],
+        ["id", "name", "label_key", "label_value", "storage_id", "schedule_id", "retention_id", "enabled", "created_at", "updated_at"],
     )
 
     notifications = _rows_to_dicts(
@@ -320,6 +321,8 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
             row = db.query(BackupJob).get(item["id"])
             if row:
                 row.name = item["name"]
+                row.label_key = item.get("label_key", "backup-buddy.job")
+                row.label_value = item.get("label_value", "")
                 row.storage_id = item["storage_id"]
                 row.schedule_id = item.get("schedule_id")
                 row.retention_id = item.get("retention_id")
@@ -327,6 +330,8 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
             else:
                 db.add(BackupJob(
                     id=item["id"], name=item["name"],
+                    label_key=item.get("label_key", "backup-buddy.job"),
+                    label_value=item.get("label_value", ""),
                     storage_id=item["storage_id"],
                     schedule_id=item.get("schedule_id"),
                     retention_id=item.get("retention_id"),

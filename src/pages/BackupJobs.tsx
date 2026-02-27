@@ -24,7 +24,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { fetchJobs, createJob, updateJob, deleteJob, runJob, pauseJob, resumeJob, fetchStorages, fetchSchedules, fetchRotations } from "@/api";
+import { fetchJobs, createJob, updateJob, deleteJob, runJob, pauseJob, resumeJob, fetchStorages, fetchSchedules, fetchRotations, fetchSettings } from "@/api";
 import type { BackupJob } from "@/api/types";
 
 type SortKey = "name" | "label" | "containers" | "storage" | "schedule" | "status" | "last_run";
@@ -36,7 +36,7 @@ export default function BackupJobs() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [editingJob, setEditingJob] = useState<BackupJob | null>(null);
-  const [formData, setFormData] = useState({ name: "", storage_id: "", schedule_id: "", retention_id: "" });
+  const [formData, setFormData] = useState({ name: "", label_key: "", label_value: "", storage_id: "", schedule_id: "", retention_id: "" });
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -44,6 +44,8 @@ export default function BackupJobs() {
   const { data: storages = [] } = useQuery({ queryKey: ["storages"], queryFn: fetchStorages });
   const { data: schedules = [] } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
   const { data: rotations = [] } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
+  const { data: settingsData } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
+  const defaultLabelKey = (settingsData?.settings as Record<string, unknown> | undefined)?.default_label_key as string || "backup-buddy.job";
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -87,6 +89,8 @@ export default function BackupJobs() {
   const createMutation = useMutation({
     mutationFn: (data: typeof formData) => createJob({
       name: data.name,
+      label_key: data.label_key || defaultLabelKey,
+      label_value: data.label_value || data.name,
       storage_id: Number(data.storage_id),
       schedule_id: data.schedule_id ? Number(data.schedule_id) : null,
       retention_id: data.retention_id ? Number(data.retention_id) : null,
@@ -98,6 +102,8 @@ export default function BackupJobs() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: typeof formData }) => updateJob(id, {
       name: data.name,
+      label_key: data.label_key || defaultLabelKey,
+      label_value: data.label_value || data.name,
       storage_id: Number(data.storage_id),
       schedule_id: data.schedule_id ? Number(data.schedule_id) : null,
       retention_id: data.retention_id ? Number(data.retention_id) : null,
@@ -132,7 +138,7 @@ export default function BackupJobs() {
 
   const openCreate = () => {
     setEditingJob(null);
-    setFormData({ name: "", storage_id: "", schedule_id: "", retention_id: "" });
+    setFormData({ name: "", label_key: defaultLabelKey, label_value: "", storage_id: "", schedule_id: "", retention_id: "" });
     setDialogOpen(true);
   };
 
@@ -140,6 +146,8 @@ export default function BackupJobs() {
     setEditingJob(job);
     setFormData({
       name: job.name,
+      label_key: job.label_key || defaultLabelKey,
+      label_value: job.label_value || "",
       storage_id: job.storage?.id?.toString() || "",
       schedule_id: job.schedule?.id?.toString() || "",
       retention_id: job.retention?.id?.toString() || "",
@@ -181,8 +189,16 @@ export default function BackupJobs() {
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
                   <Label htmlFor="job-name">Job Name</Label>
-                  <Input id="job-name" placeholder="e.g. postgres-data" className="bg-background border-border" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
-                  <p className="text-xs text-muted-foreground">Containers with label <code className="text-foreground">backup-buddy.job={formData.name || "job-name"}</code> will be matched</p>
+                  <Input id="job-name" placeholder="e.g. postgres-nightly" className="bg-background border-border" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Docker Label</Label>
+                  <div className="flex items-center gap-1">
+                    <Input className="bg-background border-border font-mono flex-1" placeholder={defaultLabelKey} value={formData.label_key} onChange={(e) => setFormData((p) => ({ ...p, label_key: e.target.value }))} />
+                    <span className="text-muted-foreground font-mono text-lg px-1">=</span>
+                    <Input className="bg-background border-border font-mono flex-1" placeholder={formData.name || "value"} value={formData.label_value} onChange={(e) => setFormData((p) => ({ ...p, label_value: e.target.value }))} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Containers with label <code className="text-foreground">{formData.label_key || defaultLabelKey}={formData.label_value || formData.name || "value"}</code> will be matched. Leave value empty to use the job name.</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Storage Backend</Label>
