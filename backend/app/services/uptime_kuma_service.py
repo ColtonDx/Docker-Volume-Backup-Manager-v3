@@ -3,8 +3,8 @@
 Creates and manages maintenance windows in Uptime Kuma so that monitors
 are automatically placed into maintenance mode while a backup job runs.
 
-Authenticates via Uptime Kuma's ``/login/access-token`` endpoint using
-username + password (HTTP Basic-style credentials).
+Uses Uptime Kuma's REST API (v1.23+) with API key authentication.
+Generate an API key in Uptime Kuma under Settings → API Keys.
 """
 
 from __future__ import annotations
@@ -60,41 +60,11 @@ class UptimeKumaService:
         return url.rstrip("/")
 
     # ------------------------------------------------------------------
-    # Auth
+    # Auth – uses HTTP Basic Auth (username + password)
     # ------------------------------------------------------------------
 
-    def _login(
-        self,
-        client: httpx.Client,
-        base: str,
-        username: str,
-        password: str,
-    ) -> str:
-        """Log in to Uptime Kuma and return a Bearer token.
-
-        Uptime Kuma exposes ``POST /api/login`` which accepts
-        ``{"username": "…", "password": "…", "token": ""}`` and returns
-        ``{"token": "…"}``.  The ``token`` field is for 2FA (empty to skip).
-        """
-        resp = client.post(
-            f"{base}/api/login",
-            json={"username": username, "password": password, "token": ""},
-        )
-        resp.raise_for_status()
-        data = self._parse_json_response(resp)
-        token = data.get("token")
-        if not token:
-            raise ValueError(
-                "Uptime Kuma login succeeded but no token was returned. "
-                f"Response: {data}"
-            )
-        return token
-
-    def _auth_headers(self, token: str) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        }
+    def _basic_auth(self, username: str, password: str) -> httpx.BasicAuth:
+        return httpx.BasicAuth(username=username, password=password)
 
     def _resolve_credentials(
         self,
@@ -133,8 +103,9 @@ class UptimeKumaService:
         if "application/json" not in content_type and body.lstrip().startswith("<"):
             raise ValueError(
                 f"Uptime Kuma returned HTML instead of JSON (HTTP {resp.status_code}). "
-                "This usually means the URL is wrong or the instance requires login. "
-                "Ensure the URL points directly to Uptime Kuma (e.g. http://uptime-kuma:3001)."
+                "This usually means the URL is wrong, or your Uptime Kuma version "
+                "doesn't support the REST API (requires 1.23+). "
+                f"Body: {body[:300]}"
             )
         try:
             return resp.json()
@@ -178,14 +149,10 @@ class UptimeKumaService:
         }
 
         try:
-            with httpx.Client(timeout=15) as client:
-                token = self._login(client, base, username, password)
-                headers = self._auth_headers(token)
-
+            auth = self._basic_auth(username, password)
+            with httpx.Client(timeout=15, auth=auth) as client:
                 # 1. Create the maintenance window
-                resp = client.post(
-                    f"{base}/api/maintenances", json=payload, headers=headers,
-                )
+                resp = client.post(f"{base}/api/maintenances", json=payload)
                 resp.raise_for_status()
                 data = self._parse_json_response(resp)
                 maintenance_id: int = (
@@ -207,7 +174,6 @@ class UptimeKumaService:
                 monitor_resp = client.post(
                     f"{base}/api/maintenances/{maintenance_id}/monitors",
                     json={"monitors": [monitor_id]},
-                    headers=headers,
                 )
                 monitor_resp.raise_for_status()
                 logger.info(
@@ -238,11 +204,10 @@ class UptimeKumaService:
         base, username, password = creds
 
         try:
-            with httpx.Client(timeout=15) as client:
-                token = self._login(client, base, username, password)
-                headers = self._auth_headers(token)
+            auth = self._basic_auth(username, password)
+            with httpx.Client(timeout=15, auth=auth) as client:
                 resp = client.delete(
-                    f"{base}/api/maintenances/{maintenance_id}", headers=headers,
+                    f"{base}/api/maintenances/{maintenance_id}",
                 )
                 resp.raise_for_status()
                 logger.info("Deleted Uptime Kuma maintenance #%d", maintenance_id)
@@ -273,10 +238,9 @@ class UptimeKumaService:
         base, uname, pwd = creds
 
         try:
-            with httpx.Client(timeout=15) as client:
-                token = self._login(client, base, uname, pwd)
-                headers = self._auth_headers(token)
-                resp = client.get(f"{base}/api/monitors", headers=headers)
+            auth = self._basic_auth(uname, pwd)
+            with httpx.Client(timeout=15, auth=auth) as client:
+                resp = client.get(f"{base}/api/monitors", headers={"Accept": "application/json"})
                 resp.raise_for_status()
                 data = self._parse_json_response(resp)
                 monitors = (
@@ -317,10 +281,9 @@ class UptimeKumaService:
         base, uname, pwd = creds
 
         try:
-            with httpx.Client(timeout=10) as client:
-                token = self._login(client, base, uname, pwd)
-                headers = self._auth_headers(token)
-                resp = client.get(f"{base}/api/monitors", headers=headers)
+            auth = self._basic_auth(uname, pwd)
+            with httpx.Client(timeout=10, auth=auth) as client:
+                resp = client.get(f"{base}/api/monitors", headers={"Accept": "application/json"})
                 resp.raise_for_status()
                 data = self._parse_json_response(resp)
                 monitors = (
