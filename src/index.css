@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&family=Righteous&display=swap');
 
 @layer base {
   :root {
@@ -166,7 +166,7 @@
    (fonts, scanlines, clipped corners, layout treatments)
    ================================================ */
 
-/* -- Font overrides (shared) -- */
+/* -- Cyberpunk font: Chakra Petch (angular, techy) + Orbitron headings -- */
 [data-theme="cyberpunk"] body,
 [data-theme="cyberpunk"] h1,
 [data-theme="cyberpunk"] h2,
@@ -181,7 +181,20 @@
 [data-theme="cyberpunk"] span,
 [data-theme="cyberpunk"] p,
 [data-theme="cyberpunk"] a,
-[data-theme="cyberpunk"] div,
+[data-theme="cyberpunk"] div {
+  font-family: 'Chakra Petch', 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+[data-theme="cyberpunk"] h1,
+[data-theme="cyberpunk"] h2,
+[data-theme="cyberpunk"] h3 {
+  font-family: 'Orbitron', 'Chakra Petch', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* -- Synthwave font: Quicksand (smooth, rounded 80s) + Righteous headings -- */
 [data-theme="synthwave"] body,
 [data-theme="synthwave"] h1,
 [data-theme="synthwave"] h2,
@@ -197,19 +210,16 @@
 [data-theme="synthwave"] p,
 [data-theme="synthwave"] a,
 [data-theme="synthwave"] div {
-  font-family: 'Rajdhani', 'Inter', sans-serif;
-  letter-spacing: 0.02em;
+  font-family: 'Quicksand', 'Inter', sans-serif;
+  letter-spacing: 0.01em;
 }
 
-[data-theme="cyberpunk"] h1,
-[data-theme="cyberpunk"] h2,
-[data-theme="cyberpunk"] h3,
 [data-theme="synthwave"] h1,
 [data-theme="synthwave"] h2,
 [data-theme="synthwave"] h3 {
-  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+  font-family: 'Righteous', 'Quicksand', sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
 }
 
 /* -- Scanline overlay (shared) -- */
@@ -254,13 +264,18 @@
   transition: border-color 0.2s;
 }
 
-/* -- Table header styling (shared) -- */
-[data-theme="cyberpunk"] th,
-[data-theme="synthwave"] th {
-  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+/* -- Table header styling -- */
+[data-theme="cyberpunk"] th {
+  font-family: 'Orbitron', 'Chakra Petch', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-size: 0.7rem;
+}
+[data-theme="synthwave"] th {
+  font-family: 'Righteous', 'Quicksand', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
 }
 
 /* -- Badge clipped corners (shared) -- */
