@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ColorThemeProvider } from "@/contexts/ColorThemeContext";
+import { AutoRefreshProvider } from "@/contexts/AutoRefreshContext";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Login from "./pages/Login";
 import Index from "./pages/Index";
@@ -50,15 +51,17 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <ColorThemeProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <AuthProvider>
-            <BrowserRouter>
-              <AppRoutes />
-            </BrowserRouter>
-          </AuthProvider>
-        </TooltipProvider>
+        <AutoRefreshProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <AuthProvider>
+              <BrowserRouter>
+                <AppRoutes />
+              </BrowserRouter>
+            </AuthProvider>
+          </TooltipProvider>
+        </AutoRefreshProvider>
       </ColorThemeProvider>
     </ThemeProvider>
   </QueryClientProvider>

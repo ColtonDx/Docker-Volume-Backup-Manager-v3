@@ -9,9 +9,11 @@ import {
   Container,
   LayoutDashboard,
   LogOut,
-  ArchiveRestore
+  ArchiveRestore,
+  RefreshCw
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAutoRefresh, REFRESH_OPTIONS } from "@/contexts/AutoRefreshContext";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSettings } from "@/api";
 import { NavLink } from "@/components/NavLink";
@@ -48,6 +50,7 @@ const systemNavItems = [
 
 export function AppSidebar() {
   const { logout } = useAuth();
+  const { interval, setInterval } = useAutoRefresh();
   const { data: settingsData } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
   const instanceName = (settingsData?.settings as Record<string, unknown>)?.instance_name as string || "Docker Volume Backup Manager";
   
@@ -139,7 +142,26 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border p-4">
+      <SidebarFooter className="border-t border-border p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <RefreshCw className={`h-3.5 w-3.5 text-muted-foreground${interval ? ' animate-spin' : ''}`} style={interval ? { animationDuration: '3s' } : undefined} />
+          <span className="text-xs text-muted-foreground">Auto Refresh</span>
+          <div className="ml-auto flex gap-1">
+            {REFRESH_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setInterval(opt.value)}
+                className={`px-1.5 py-0.5 text-[10px] rounded transition-colors ${
+                  interval === opt.value
+                    ? 'bg-primary/15 text-primary font-semibold'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="status-dot status-dot-active" />
