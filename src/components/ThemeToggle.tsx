@@ -1,9 +1,14 @@
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { useColorTheme, DARK_ONLY_THEMES } from "@/contexts/ColorThemeContext";
 
 export function ThemeToggle() {
   const { setTheme, theme } = useTheme();
+  const { colorTheme } = useColorTheme();
+
+  // Hide toggle for dark-only themes (cyberpunk, synthwave)
+  if (DARK_ONLY_THEMES.includes(colorTheme)) return null;
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useTheme } from "next-themes";
 
 /**
  * Theme ID format: "<family>-<variant>"
@@ -6,6 +7,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
  * (e.g. "minimal-blue", "neon-pink") later.
  */
 export type ThemeId = "default-blue" | "default-purple" | "default-red" | "default-green" | "cyberpunk" | "synthwave";
+
+/** Themes that are forced dark-only (no light mode) */
+export const DARK_ONLY_THEMES: ThemeId[] = ["cyberpunk", "synthwave"];
 
 export interface ThemeOption {
   id: ThemeId;
@@ -54,6 +58,8 @@ function migrateLegacy(raw: string | null): ThemeId | null {
 }
 
 export function ColorThemeProvider({ children }: { children: ReactNode }) {
+  const { setTheme } = useTheme();
+
   const [colorTheme, setColorThemeState] = useState<ThemeId>(() => {
     try {
       return migrateLegacy(localStorage.getItem(STORAGE_KEY)) ?? "default-blue";
@@ -68,10 +74,16 @@ export function ColorThemeProvider({ children }: { children: ReactNode }) {
     } else {
       root.setAttribute("data-theme", colorTheme);
     }
+
+    // Force dark mode for dark-only themes
+    if (DARK_ONLY_THEMES.includes(colorTheme)) {
+      setTheme("dark");
+    }
+
     try {
       localStorage.setItem(STORAGE_KEY, colorTheme);
     } catch {}
-  }, [colorTheme]);
+  }, [colorTheme, setTheme]);
 
   return (
     <ColorThemeContext.Provider value={{ colorTheme, setColorTheme: setColorThemeState }}>

@@ -360,16 +360,61 @@
     0 0 48px hsl(200 100% 50% / 0.1);
 }
 
+/* -- Cyberpunk sidebar: clean, single thin line instead of stacked borders -- */
+[data-theme="cyberpunk"] [data-sidebar="sidebar"] {
+  border-right: none !important;
+}
+[data-theme="cyberpunk"] [data-sidebar="sidebar"] ~ div,
+[data-theme="cyberpunk"] [data-sidebar="sidebar"] > div {
+  border-right: none !important;
+}
+[data-theme="cyberpunk"] aside.border-r,
+[data-theme="cyberpunk"] aside .border-r {
+  border-right-width: 0 !important;
+}
+/* Single clean divider line via shadow */
 [data-theme="cyberpunk"] [data-sidebar] {
-  border-right: 2px solid hsl(200 100% 50% / 0.2);
-  box-shadow: inset -1px 0 12px hsl(200 100% 50% / 0.04);
-  padding-right: 0.5rem;
+  box-shadow: 1px 0 0 hsl(200 100% 50% / 0.18);
 }
 
+/* -- Cyberpunk sidebar nav links: skewed parallelogram (CP2077 style) -- */
+[data-theme="cyberpunk"] [data-sidebar] nav a {
+  transform: skewX(-6deg);
+  border-radius: 0;
+  margin: 2px 6px;
+  transition: all 0.15s ease;
+}
+[data-theme="cyberpunk"] [data-sidebar] nav a > * {
+  transform: skewX(6deg);
+}
+[data-theme="cyberpunk"] [data-sidebar] nav a:hover {
+  background: hsl(200 100% 50% / 0.08);
+}
+
+/* -- Active nav link: yellow left bar, subtle fill -- */
 [data-theme="cyberpunk"] [data-sidebar] a.bg-primary\/10 {
-  border-left: 3px solid hsl(54 96% 60% / 0.8);
-  box-shadow: inset 4px 0 8px hsl(54 96% 60% / 0.1);
-  margin-right: 0.25rem;
+  background: hsl(54 96% 60% / 0.08) !important;
+  border-left: 3px solid hsl(54 96% 60% / 0.9);
+  box-shadow: inset 0 0 12px hsl(54 96% 60% / 0.05);
+}
+
+/* -- Cyberpunk group labels in sidebar -- */
+[data-theme="cyberpunk"] [data-sidebar] [class*="GroupLabel"] {
+  color: hsl(200 100% 50% / 0.5);
+  letter-spacing: 0.15em;
+}
+
+/* -- Yellow headings, blue descriptions (CP2077 poster style) -- */
+[data-theme="cyberpunk"] h1,
+[data-theme="cyberpunk"] h2,
+[data-theme="cyberpunk"] h3,
+[data-theme="cyberpunk"] [class*="CardTitle"] {
+  color: hsl(54 96% 60%);
+}
+[data-theme="cyberpunk"] p.text-muted-foreground,
+[data-theme="cyberpunk"] span.text-muted-foreground,
+[data-theme="cyberpunk"] div.text-muted-foreground {
+  color: hsl(200 100% 55% / 0.7);
 }
 
 [data-theme="cyberpunk"] button[class*="bg-primary"],
@@ -645,18 +690,10 @@
 }
 
 /* ---------- Cyberpunk ---------- */
-[data-theme="cyberpunk"] {
-  --primary: 54 96% 60%;
-  --primary-foreground: 0 0% 0%;
-  --accent: 200 100% 50%;
-  --accent-foreground: 0 0% 100%;
-  --ring: 200 100% 50%;
-  --sidebar-primary: 54 96% 60%;
-  --sidebar-ring: 200 100% 50%;
-  --chart-1: 54 96% 60%;
-}
-.dark[data-theme="cyberpunk"],
-[data-theme="cyberpunk"].dark {
+/* Light mode vars intentionally omitted — cyberpunk is dark-only */
+[data-theme="cyberpunk"],
+[data-theme="cyberpunk"].dark,
+.dark[data-theme="cyberpunk"] {
   --background: 230 25% 4%;
   --foreground: 54 20% 92%;
   --card: 230 30% 7%;
@@ -694,6 +731,7 @@
   --chart-4: 340 100% 55%;
   --chart-5: 270 80% 60%;
   --radius: 0.15rem;
+  color-scheme: dark;
 }
 
 /* ---------- Synthwave ---------- */

@@ -55,7 +55,7 @@ export function AppSidebar() {
   const instanceName = (settingsData?.settings as Record<string, unknown>)?.instance_name as string || "Docker Volume Backup Manager";
   
   return (
-    <Sidebar className="border-r border-border">
+    <Sidebar>
       <SidebarHeader className="border-b border-border p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 glow-primary">
