@@ -236,7 +236,7 @@ class LogEntryOut(BaseModel):
 
 class NotificationChannelBase(BaseModel):
     name: str
-    type: str  # email | slack | webhook
+    type: str  # email | slack | discord | gotify | ntfy | webhook
     config: dict[str, Any] = {}
     events: list[str] = []
     enabled: bool = True

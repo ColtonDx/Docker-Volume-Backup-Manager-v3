@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Mail, MessageSquare, Webhook, Edit, Trash2, MoreVertical, TestTube, MessageCircle } from "lucide-react";
+import { Plus, Mail, MessageSquare, Webhook, Edit, Trash2, MoreVertical, TestTube, MessageCircle, Bell, BellRing } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -24,7 +24,7 @@ import {
 import { fetchNotifications, createNotification, updateNotification, deleteNotification, testNotification } from "@/api";
 import type { NotificationChannel } from "@/api/types";
 
-const typeIcons: Record<string, typeof Mail> = { email: Mail, slack: MessageSquare, discord: MessageCircle, webhook: Webhook };
+const typeIcons: Record<string, typeof Mail> = { email: Mail, slack: MessageSquare, discord: MessageCircle, gotify: Bell, ntfy: BellRing, webhook: Webhook };
 const eventLabels: Record<string, { label: string; color: string }> = {
   failure: { label: "Failure", color: "bg-destructive/20 text-destructive" },
   warning: { label: "Warning", color: "bg-warning/20 text-warning" },
@@ -115,6 +115,8 @@ export default function Notifications() {
                       <SelectItem value="email">Email</SelectItem>
                       <SelectItem value="slack">Slack</SelectItem>
                       <SelectItem value="discord">Discord</SelectItem>
+                      <SelectItem value="gotify">Gotify</SelectItem>
+                      <SelectItem value="ntfy">ntfy</SelectItem>
                       <SelectItem value="webhook">Webhook</SelectItem>
                     </SelectContent>
                   </Select>
@@ -158,6 +160,36 @@ export default function Notifications() {
                           <SelectItem value="PUT">PUT</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                  </>
+                )}
+                {form.type === "gotify" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Server URL</Label>
+                      <Input className="bg-background border-border font-mono text-sm" placeholder="https://gotify.example.com" value={(form.config.server_url as string) || ""} onChange={(e) => setConfigField("server_url", e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Application Token</Label>
+                      <Input className="bg-background border-border font-mono text-sm" placeholder="A..." value={(form.config.app_token as string) || ""} onChange={(e) => setConfigField("app_token", e.target.value)} />
+                    </div>
+                  </>
+                )}
+                {form.type === "ntfy" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Server URL</Label>
+                      <Input className="bg-background border-border font-mono text-sm" placeholder="https://ntfy.sh" value={(form.config.server_url as string) || "https://ntfy.sh"} onChange={(e) => setConfigField("server_url", e.target.value)} />
+                      <p className="text-xs text-muted-foreground">Default: https://ntfy.sh (public server)</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Topic</Label>
+                      <Input className="bg-background border-border font-mono text-sm" placeholder="backup-buddy-alerts" value={(form.config.topic as string) || ""} onChange={(e) => setConfigField("topic", e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Access Token (optional)</Label>
+                      <Input className="bg-background border-border font-mono text-sm" placeholder="tk_..." value={(form.config.access_token as string) || ""} onChange={(e) => setConfigField("access_token", e.target.value)} />
+                      <p className="text-xs text-muted-foreground">Required if topic needs authentication</p>
                     </div>
                   </>
                 )}

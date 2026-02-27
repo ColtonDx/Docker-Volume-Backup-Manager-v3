@@ -170,7 +170,7 @@ export interface LogEntry {
 export interface NotificationChannel {
   id: number;
   name: string;
-  type: "email" | "slack" | "webhook";
+  type: "email" | "slack" | "discord" | "gotify" | "ntfy" | "webhook";
   config: Record<string, unknown>;
   events: string[];
   enabled: boolean;

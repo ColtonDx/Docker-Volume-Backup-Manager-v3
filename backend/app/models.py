@@ -131,7 +131,7 @@ class NotificationChannel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
-    type = Column(String, nullable=False)  # email | slack | webhook
+    type = Column(String, nullable=False)  # email | slack | discord | gotify | ntfy | webhook
     config_json = Column(Text, nullable=False, default="{}")
     events_json = Column(Text, nullable=False, default="[]")  # ["failure","warning","success"]
     enabled = Column(Boolean, default=True)

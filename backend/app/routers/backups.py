@@ -134,6 +134,13 @@ def import_backups(job_id: int = Query(...), db: Session = Depends(get_db)):
     if imported > 0:
         db.commit()
 
+    # Log the import operation
+    from app.models import LogEntry
+    level = "success" if imported > 0 else "info"
+    log_msg = f"Import scan: {imported} backup(s) imported, {skipped} skipped, {len(files)} found on storage"
+    db.add(LogEntry(level=level, job_name=job.name, message=log_msg))
+    db.commit()
+
     return {
         "imported": imported,
         "skipped": skipped,
