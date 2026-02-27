@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check, Download, Upload, Radio } from "lucide-react";
+import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check, Download, Upload, Radio, Activity } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -16,7 +16,7 @@ import {
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchSettings, updateSettings, resetSettings, clearLogs } from "@/api";
+import { fetchSettings, updateSettings, resetSettings, clearLogs, testUptimeKuma } from "@/api";
 import { useColorTheme, THEMES, type ThemeId } from "@/contexts/ColorThemeContext";
 
 export default function Settings() {
@@ -50,6 +50,12 @@ export default function Settings() {
   const clearMut = useMutation({
     mutationFn: () => clearLogs(),
     onSuccess: () => { toast.success("Logs cleared"); queryClient.invalidateQueries({ queryKey: ["logs"] }); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const testKumaMut = useMutation({
+    mutationFn: () => testUptimeKuma(),
+    onSuccess: (res) => { res.success ? toast.success(res.message) : toast.error(res.message); },
     onError: (err: Error) => toast.error(err.message),
   });
 
@@ -313,6 +319,37 @@ export default function Settings() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-border animate-fade-in">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Activity className="h-5 w-5 text-primary" /></div>
+              <div><CardTitle className="text-lg">Uptime Kuma</CardTitle><CardDescription>Automatically create maintenance windows when backup jobs run (requires Uptime Kuma 1.23+ with API key)</CardDescription></div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div><Label>Enable Uptime Kuma Integration</Label><p className="text-sm text-muted-foreground">Create maintenance windows for monitors during backups</p></div>
+              <Switch checked={!!form.uptime_kuma_enabled} onCheckedChange={(v) => set("uptime_kuma_enabled", v)} />
+            </div>
+            <Separator className="bg-border" />
+            <div className="space-y-2">
+              <Label>Uptime Kuma URL</Label>
+              <Input className="bg-background border-border font-mono text-sm" placeholder="http://uptime-kuma:3001" value={(form.uptime_kuma_url as string) || ""} onChange={(e) => set("uptime_kuma_url", e.target.value)} disabled={!form.uptime_kuma_enabled} />
+              <p className="text-xs text-muted-foreground">The base URL of your Uptime Kuma instance (no trailing slash)</p>
+            </div>
+            <div className="space-y-2">
+              <Label>API Key</Label>
+              <Input className="bg-background border-border font-mono text-sm" type="password" placeholder="uk1_xxxxxxxxxxxxxxxx" value={(form.uptime_kuma_api_key as string) || ""} onChange={(e) => set("uptime_kuma_api_key", e.target.value)} disabled={!form.uptime_kuma_enabled} />
+              <p className="text-xs text-muted-foreground">Generate an API key in Uptime Kuma under Settings &rarr; API Keys</p>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => testKumaMut.mutate()} disabled={!form.uptime_kuma_enabled || testKumaMut.isPending}>
+                {testKumaMut.isPending ? "Testing..." : "Test Connection"}
+              </Button>
             </div>
           </CardContent>
         </Card>

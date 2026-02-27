@@ -79,6 +79,7 @@ class BackupJob(Base):
     storage_id = Column(Integer, ForeignKey("storage_backends.id"), nullable=False)
     schedule_id = Column(Integer, ForeignKey("schedules.id", ondelete="SET NULL"), nullable=True)
     retention_id = Column(Integer, ForeignKey("retention_policies.id"), nullable=True)
+    uptime_kuma_monitor_id = Column(Integer, nullable=True)
     enabled = Column(Boolean, default=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

@@ -50,6 +50,9 @@ DEFAULTS: dict[str, Any] = {
     "syslog_port": 514,
     "syslog_protocol": "udp",
     "syslog_facility": "local0",
+    "uptime_kuma_enabled": False,
+    "uptime_kuma_url": "",
+    "uptime_kuma_api_key": "",
 }
 
 
@@ -106,6 +109,22 @@ def _sync_rclone_config(settings_dict: dict[str, Any]) -> None:
         logger.error("Failed to write rclone config to %s: %s", config_path, exc)
 
 
+@router.post("/uptime-kuma/test")
+def test_uptime_kuma(db: Session = Depends(get_db)):
+    """Test connectivity to the configured Uptime Kuma instance."""
+    from app.services.uptime_kuma_service import uptime_kuma_service
+    result = uptime_kuma_service.test_connection()
+    return result
+
+
+@router.get("/uptime-kuma/monitors")
+def list_uptime_kuma_monitors(db: Session = Depends(get_db)):
+    """List monitors from the configured Uptime Kuma instance."""
+    from app.services.uptime_kuma_service import uptime_kuma_service
+    monitors = uptime_kuma_service.list_monitors()
+    return {"monitors": monitors}
+
+
 @router.post("/reset")
 def reset_settings(db: Session = Depends(get_db)):
     """Reset all settings to defaults."""
@@ -156,7 +175,7 @@ def export_config(db: Session = Depends(get_db)):
 
     jobs = _rows_to_dicts(
         db.query(BackupJob).all(),
-        ["id", "name", "label_key", "label_value", "storage_id", "schedule_id", "retention_id", "enabled", "created_at", "updated_at"],
+        ["id", "name", "label_key", "label_value", "storage_id", "schedule_id", "retention_id", "uptime_kuma_monitor_id", "enabled", "created_at", "updated_at"],
     )
 
     notifications = _rows_to_dicts(
@@ -326,6 +345,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
                 row.storage_id = item["storage_id"]
                 row.schedule_id = item.get("schedule_id")
                 row.retention_id = item.get("retention_id")
+                row.uptime_kuma_monitor_id = item.get("uptime_kuma_monitor_id")
                 row.enabled = item.get("enabled", True)
             else:
                 db.add(BackupJob(
@@ -335,6 +355,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
                     storage_id=item["storage_id"],
                     schedule_id=item.get("schedule_id"),
                     retention_id=item.get("retention_id"),
+                    uptime_kuma_monitor_id=item.get("uptime_kuma_monitor_id"),
                     enabled=item.get("enabled", True),
                 ))
         imported["backup_jobs"] = len(jobs_list)

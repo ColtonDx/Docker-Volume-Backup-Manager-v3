@@ -50,11 +50,13 @@ class BackupService:
         from app.services.docker_service import docker_service
         from app.services.storage_service import storage_service
         from app.services.notification_service import notification_service
+        from app.services.uptime_kuma_service import uptime_kuma_service
         from app.config import settings
 
         db = SessionLocal()
         start_time = time.time()
         record = None
+        kuma_maintenance_id: int | None = None
 
         try:
             job = db.query(BackupJob).get(job_id)
@@ -86,6 +88,21 @@ class BackupService:
                     f"No containers matched label '{label_key}={label_value}'. "
                     "Ensure your containers have the correct label set."
                 )
+
+            # -- Uptime Kuma: create maintenance window before stopping containers
+            if job.uptime_kuma_monitor_id:
+                try:
+                    kuma_maintenance_id = uptime_kuma_service.create_maintenance(
+                        job.uptime_kuma_monitor_id, job.name
+                    )
+                    if kuma_maintenance_id:
+                        self._log(
+                            db, "info", job.name,
+                            f"Uptime Kuma maintenance #{kuma_maintenance_id} created for monitor {job.uptime_kuma_monitor_id}"
+                        )
+                except Exception as kuma_exc:
+                    logger.warning("Failed to create Uptime Kuma maintenance: %s", kuma_exc)
+                    self._log(db, "warning", job.name, f"Uptime Kuma maintenance creation failed: {kuma_exc}")
 
             # 2. Collect volumes from those containers
             all_volumes: list[dict[str, str]] = []
@@ -189,6 +206,15 @@ class BackupService:
                     logger.warning("Retention cleanup failed after backup: %s", ret_exc)
                     self._log(db, "warning", job.name, f"Retention cleanup failed: {ret_exc}")
 
+            # 10. End Uptime Kuma maintenance window
+            if kuma_maintenance_id:
+                try:
+                    uptime_kuma_service.end_maintenance(kuma_maintenance_id)
+                    self._log(db, "info", job.name, f"Uptime Kuma maintenance #{kuma_maintenance_id} ended")
+                except Exception as kuma_exc:
+                    logger.warning("Failed to end Uptime Kuma maintenance: %s", kuma_exc)
+                    self._log(db, "warning", job.name, f"Uptime Kuma maintenance end failed: {kuma_exc}")
+
         except Exception as exc:
             logger.exception("Backup job %d failed", job_id)
             if record:
@@ -208,6 +234,13 @@ class BackupService:
 
             self._log(db, "error", job_name, f"Backup failed: {exc}")
             notification_service.notify_event("failure", job_name, str(exc))
+
+            # Try to end Uptime Kuma maintenance on failure
+            if kuma_maintenance_id:
+                try:
+                    uptime_kuma_service.end_maintenance(kuma_maintenance_id)
+                except Exception:
+                    pass
 
             # Try to restart any stopped containers
             try:

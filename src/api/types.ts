@@ -114,6 +114,7 @@ export interface BackupJob {
   label_value: string;
   label: string;
   enabled: boolean;
+  uptime_kuma_monitor_id: number | null;
   storage: StorageBackend | null;
   schedule: Schedule | null;
   retention: RetentionPolicy | null;
@@ -132,6 +133,7 @@ export interface BackupJobCreate {
   storage_id: number;
   schedule_id?: number | null;
   retention_id?: number | null;
+  uptime_kuma_monitor_id?: number | null;
   enabled?: boolean;
 }
 
@@ -142,6 +144,7 @@ export interface BackupJobUpdate {
   storage_id?: number;
   schedule_id?: number | null;
   retention_id?: number | null;
+  uptime_kuma_monitor_id?: number | null;
   enabled?: boolean;
 }
 
@@ -267,4 +270,20 @@ export interface JobDetailStats {
   recent_backups: BackupRecord[];
   logs: LogEntry[];
   schedule_info: { name: string; cron: string; next_run: string | null } | null;
+}
+
+// Uptime Kuma
+export interface UptimeKumaMonitor {
+  id: number;
+  name: string;
+  type: string;
+}
+
+export interface UptimeKumaTestResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface UptimeKumaMonitorsResponse {
+  monitors: UptimeKumaMonitor[];
 }
