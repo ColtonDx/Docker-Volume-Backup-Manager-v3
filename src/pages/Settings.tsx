@@ -56,7 +56,8 @@ export default function Settings() {
   const testKumaMut = useMutation({
     mutationFn: () => testUptimeKuma({
       url: (form.uptime_kuma_url as string) || undefined,
-      api_key: (form.uptime_kuma_api_key as string) || undefined,
+      username: (form.uptime_kuma_username as string) || undefined,
+      password: (form.uptime_kuma_password as string) || undefined,
     }),
     onSuccess: (res) => { res.success ? toast.success(res.message) : toast.error(res.message); },
     onError: (err: Error) => toast.error(err.message),
@@ -330,7 +331,7 @@ export default function Settings() {
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Activity className="h-5 w-5 text-primary" /></div>
-              <div><CardTitle className="text-lg">Uptime Kuma</CardTitle><CardDescription>Automatically create maintenance windows when backup jobs run (requires Uptime Kuma 1.23+ with API key)</CardDescription></div>
+              <div><CardTitle className="text-lg">Uptime Kuma</CardTitle><CardDescription>Automatically create maintenance windows when backup jobs run</CardDescription></div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -344,11 +345,17 @@ export default function Settings() {
               <Input className="bg-background border-border font-mono text-sm" placeholder="http://uptime-kuma:3001" value={(form.uptime_kuma_url as string) || ""} onChange={(e) => set("uptime_kuma_url", e.target.value)} disabled={!form.uptime_kuma_enabled} />
               <p className="text-xs text-muted-foreground">The base URL of your Uptime Kuma instance (no trailing slash)</p>
             </div>
-            <div className="space-y-2">
-              <Label>API Key</Label>
-              <Input className="bg-background border-border font-mono text-sm" type="password" placeholder="uk1_xxxxxxxxxxxxxxxx" value={(form.uptime_kuma_api_key as string) || ""} onChange={(e) => set("uptime_kuma_api_key", e.target.value)} disabled={!form.uptime_kuma_enabled} />
-              <p className="text-xs text-muted-foreground">Generate an API key in Uptime Kuma under Settings &rarr; API Keys</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Username</Label>
+                <Input className="bg-background border-border font-mono text-sm" placeholder="admin" value={(form.uptime_kuma_username as string) || ""} onChange={(e) => set("uptime_kuma_username", e.target.value)} disabled={!form.uptime_kuma_enabled} />
+              </div>
+              <div className="space-y-2">
+                <Label>Password</Label>
+                <Input className="bg-background border-border font-mono text-sm" type="password" placeholder="••••••••" value={(form.uptime_kuma_password as string) || ""} onChange={(e) => set("uptime_kuma_password", e.target.value)} disabled={!form.uptime_kuma_enabled} />
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">Your Uptime Kuma login credentials. Used to authenticate API requests.</p>
             <div className="flex justify-end">
               <Button variant="outline" size="sm" onClick={() => testKumaMut.mutate()} disabled={!form.uptime_kuma_enabled || testKumaMut.isPending}>
                 {testKumaMut.isPending ? "Testing..." : "Test Connection"}

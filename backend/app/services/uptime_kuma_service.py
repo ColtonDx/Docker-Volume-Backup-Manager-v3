@@ -3,7 +3,8 @@
 Creates and manages maintenance windows in Uptime Kuma so that monitors
 are automatically placed into maintenance mode while a backup job runs.
 
-Requires Uptime Kuma 1.23+ with API key authentication.
+Authenticates via Uptime Kuma's ``/login/access-token`` endpoint using
+username + password (HTTP Basic-style credentials).
 """
 
 from __future__ import annotations
@@ -32,7 +33,12 @@ class UptimeKumaService:
 
         db = SessionLocal()
         try:
-            keys = ("uptime_kuma_enabled", "uptime_kuma_url", "uptime_kuma_api_key")
+            keys = (
+                "uptime_kuma_enabled",
+                "uptime_kuma_url",
+                "uptime_kuma_username",
+                "uptime_kuma_password",
+            )
             result: dict[str, Any] = {}
             for key in keys:
                 row = db.query(Setting).get(key)
@@ -49,15 +55,70 @@ class UptimeKumaService:
         s = settings or self._get_settings()
         return bool(s.get("uptime_kuma_enabled")) and bool(s.get("uptime_kuma_url"))
 
-    def _headers(self, api_key: str) -> dict[str, str]:
-        return {
-            "Authorization": api_key,
-            "Content-Type": "application/json",
-        }
-
     def _base_url(self, url: str) -> str:
         """Normalise the base URL (strip trailing slash)."""
         return url.rstrip("/")
+
+    # ------------------------------------------------------------------
+    # Auth
+    # ------------------------------------------------------------------
+
+    def _login(
+        self,
+        client: httpx.Client,
+        base: str,
+        username: str,
+        password: str,
+    ) -> str:
+        """Log in to Uptime Kuma and return a Bearer token.
+
+        Uptime Kuma exposes ``POST /login/access-token`` which accepts
+        ``{"username": "…", "password": "…"}`` and returns
+        ``{"token": "…"}``.
+        """
+        resp = client.post(
+            f"{base}/login/access-token",
+            json={"username": username, "password": password},
+        )
+        resp.raise_for_status()
+        data = self._parse_json_response(resp)
+        token = data.get("token")
+        if not token:
+            raise ValueError(
+                "Uptime Kuma login succeeded but no token was returned. "
+                f"Response: {data}"
+            )
+        return token
+
+    def _auth_headers(self, token: str) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+
+    def _resolve_credentials(
+        self,
+        url: str | None,
+        username: str | None,
+        password: str | None,
+    ) -> tuple[str, str, str] | None:
+        """Return (base_url, username, password) from explicit args or DB.
+
+        Returns ``None`` when the integration is disabled or credentials
+        are missing.
+        """
+        if url and username and password:
+            return self._base_url(url), username, password
+
+        settings = self._get_settings()
+        if not self._is_enabled(settings):
+            return None
+        base = self._base_url(settings["uptime_kuma_url"])
+        uname = settings.get("uptime_kuma_username", "")
+        pwd = settings.get("uptime_kuma_password", "")
+        if not uname or not pwd:
+            return None
+        return base, uname, pwd
 
     @staticmethod
     def _parse_json_response(resp: httpx.Response) -> Any:
@@ -92,28 +153,22 @@ class UptimeKumaService:
 
         Returns the Uptime Kuma maintenance ID, or *None* on failure / disabled.
         """
-        settings = self._get_settings()
-        if not self._is_enabled(settings):
+        creds = self._resolve_credentials(None, None, None)
+        if creds is None:
             return None
-
-        base = self._base_url(settings["uptime_kuma_url"])
-        api_key = settings.get("uptime_kuma_api_key", "")
-        if not api_key:
-            logger.warning("Uptime Kuma API key not configured – skipping maintenance window")
-            return None
-
-        headers = self._headers(api_key)
+        base, username, password = creds
 
         now = datetime.now(timezone.utc)
-        # Create a maintenance window that starts now and lasts 4 hours
-        # (it will be ended explicitly when the backup finishes).
         end = now + timedelta(hours=4)
 
         payload = {
             "title": f"Backup Buddy: {job_name}",
             "strategy": "manual",
             "active": True,
-            "description": f"Automated maintenance window created by Backup Buddy for job '{job_name}'.",
+            "description": (
+                f"Automated maintenance window created by Backup Buddy "
+                f"for job '{job_name}'."
+            ),
             "dateRange": [
                 now.strftime("%Y-%m-%d %H:%M:%S"),
                 end.strftime("%Y-%m-%d %H:%M:%S"),
@@ -124,32 +179,41 @@ class UptimeKumaService:
 
         try:
             with httpx.Client(timeout=15) as client:
+                token = self._login(client, base, username, password)
+                headers = self._auth_headers(token)
+
                 # 1. Create the maintenance window
-                resp = client.post(f"{base}/api/maintenances", json=payload, headers=headers)
+                resp = client.post(
+                    f"{base}/api/maintenances", json=payload, headers=headers,
+                )
                 resp.raise_for_status()
                 data = self._parse_json_response(resp)
-                maintenance_id: int = data.get("maintenance", {}).get("id") or data.get("id")
+                maintenance_id: int = (
+                    data.get("maintenance", {}).get("id") or data.get("id")
+                )
                 if not maintenance_id:
-                    logger.error("Uptime Kuma did not return a maintenance ID: %s", data)
+                    logger.error(
+                        "Uptime Kuma did not return a maintenance ID: %s", data,
+                    )
                     return None
 
                 logger.info(
                     "Created Uptime Kuma maintenance #%d for job '%s'",
-                    maintenance_id, job_name,
+                    maintenance_id,
+                    job_name,
                 )
 
                 # 2. Attach the monitor to this maintenance window
-                monitors_payload = {"monitors": [monitor_id]}
                 monitor_resp = client.post(
                     f"{base}/api/maintenances/{maintenance_id}/monitors",
-                    json=monitors_payload,
+                    json={"monitors": [monitor_id]},
                     headers=headers,
                 )
                 monitor_resp.raise_for_status()
-
                 logger.info(
                     "Attached monitor %d to maintenance #%d",
-                    monitor_id, maintenance_id,
+                    monitor_id,
+                    maintenance_id,
                 )
 
                 return maintenance_id
@@ -157,7 +221,9 @@ class UptimeKumaService:
         except httpx.HTTPStatusError as exc:
             logger.error(
                 "Uptime Kuma API error (%s %s): %s",
-                exc.response.status_code, exc.request.url, exc.response.text,
+                exc.response.status_code,
+                exc.request.url,
+                exc.response.text,
             )
         except Exception as exc:
             logger.error("Failed to create Uptime Kuma maintenance window: %s", exc)
@@ -166,63 +232,62 @@ class UptimeKumaService:
 
     def end_maintenance(self, maintenance_id: int) -> None:
         """End (delete) a maintenance window by its ID."""
-        settings = self._get_settings()
-        if not self._is_enabled(settings):
+        creds = self._resolve_credentials(None, None, None)
+        if creds is None:
             return
-
-        base = self._base_url(settings["uptime_kuma_url"])
-        api_key = settings.get("uptime_kuma_api_key", "")
-        if not api_key:
-            return
-
-        headers = self._headers(api_key)
+        base, username, password = creds
 
         try:
             with httpx.Client(timeout=15) as client:
-                resp = client.delete(f"{base}/api/maintenances/{maintenance_id}", headers=headers)
+                token = self._login(client, base, username, password)
+                headers = self._auth_headers(token)
+                resp = client.delete(
+                    f"{base}/api/maintenances/{maintenance_id}", headers=headers,
+                )
                 resp.raise_for_status()
                 logger.info("Deleted Uptime Kuma maintenance #%d", maintenance_id)
         except httpx.HTTPStatusError as exc:
             logger.warning(
                 "Could not delete Uptime Kuma maintenance #%d (%s): %s",
-                maintenance_id, exc.response.status_code, exc.response.text,
+                maintenance_id,
+                exc.response.status_code,
+                exc.response.text,
             )
         except Exception as exc:
-            logger.warning("Failed to end Uptime Kuma maintenance #%d: %s", maintenance_id, exc)
+            logger.warning(
+                "Failed to end Uptime Kuma maintenance #%d: %s",
+                maintenance_id,
+                exc,
+            )
 
     def list_monitors(
         self,
         url: str | None = None,
-        api_key: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Fetch the list of monitors from Uptime Kuma.
-
-        If *url* / *api_key* are passed they are used directly (for testing
-        before the settings have been saved).  Otherwise the values stored in
-        the database are used.
-        """
-        if url and api_key:
-            base = self._base_url(url)
-        else:
-            settings = self._get_settings()
-            if not self._is_enabled(settings):
-                return []
-            base = self._base_url(settings["uptime_kuma_url"])
-            api_key = settings.get("uptime_kuma_api_key", "")
-            if not api_key:
-                return []
-
-        headers = self._headers(api_key)
+        """Fetch the list of monitors from Uptime Kuma."""
+        creds = self._resolve_credentials(url, username, password)
+        if creds is None:
+            return []
+        base, uname, pwd = creds
 
         try:
             with httpx.Client(timeout=15) as client:
+                token = self._login(client, base, uname, pwd)
+                headers = self._auth_headers(token)
                 resp = client.get(f"{base}/api/monitors", headers=headers)
                 resp.raise_for_status()
                 data = self._parse_json_response(resp)
-                # Uptime Kuma returns {"monitors": [...]} or a list directly
-                monitors = data if isinstance(data, list) else data.get("monitors", [])
+                monitors = (
+                    data if isinstance(data, list) else data.get("monitors", [])
+                )
                 return [
-                    {"id": m.get("id"), "name": m.get("name"), "type": m.get("type")}
+                    {
+                        "id": m.get("id"),
+                        "name": m.get("name"),
+                        "type": m.get("type"),
+                    }
                     for m in monitors
                     if m.get("id") is not None
                 ]
@@ -233,37 +298,39 @@ class UptimeKumaService:
     def test_connection(
         self,
         url: str | None = None,
-        api_key: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ) -> dict[str, Any]:
         """Verify connectivity to Uptime Kuma.
 
-        If *url* / *api_key* are passed they are used directly (handy for
-        testing from the Settings page before saving).
-
         Returns ``{"success": True/False, "message": "..."}``
         """
-        if url and api_key:
-            base = self._base_url(url)
-        else:
-            settings = self._get_settings()
-            if not self._is_enabled(settings):
-                return {"success": False, "message": "Uptime Kuma integration is not enabled. Save your settings first, or provide a URL and API key."}
-            base = self._base_url(settings["uptime_kuma_url"])
-            api_key = settings.get("uptime_kuma_api_key", "")
-            if not api_key:
-                return {"success": False, "message": "API key is not configured"}
-
-        headers = self._headers(api_key)
+        creds = self._resolve_credentials(url, username, password)
+        if creds is None:
+            return {
+                "success": False,
+                "message": (
+                    "Uptime Kuma integration is not enabled or credentials "
+                    "are missing. Fill in the URL, username, and password."
+                ),
+            }
+        base, uname, pwd = creds
 
         try:
             with httpx.Client(timeout=10) as client:
+                token = self._login(client, base, uname, pwd)
+                headers = self._auth_headers(token)
                 resp = client.get(f"{base}/api/monitors", headers=headers)
                 resp.raise_for_status()
                 data = self._parse_json_response(resp)
-                monitors = data if isinstance(data, list) else data.get("monitors", [])
+                monitors = (
+                    data if isinstance(data, list) else data.get("monitors", [])
+                )
                 return {
                     "success": True,
-                    "message": f"Connected successfully – {len(monitors)} monitor(s) found",
+                    "message": (
+                        f"Connected successfully – {len(monitors)} monitor(s) found"
+                    ),
                 }
         except httpx.HTTPStatusError as exc:
             return {

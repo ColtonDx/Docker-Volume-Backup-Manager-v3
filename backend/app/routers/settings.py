@@ -52,7 +52,8 @@ DEFAULTS: dict[str, Any] = {
     "syslog_facility": "local0",
     "uptime_kuma_enabled": False,
     "uptime_kuma_url": "",
-    "uptime_kuma_api_key": "",
+    "uptime_kuma_username": "",
+    "uptime_kuma_password": "",
 }
 
 
@@ -113,13 +114,14 @@ def _sync_rclone_config(settings_dict: dict[str, Any]) -> None:
 def test_uptime_kuma(body: dict | None = None, db: Session = Depends(get_db)):
     """Test connectivity to the configured Uptime Kuma instance.
 
-    Optionally accepts ``{"url": "...", "api_key": "..."}`` in the request
-    body so the test can run with unsaved form values.
+    Optionally accepts ``{"url": "...", "username": "...", "password": "..."}``
+    in the request body so the test can run with unsaved form values.
     """
     from app.services.uptime_kuma_service import uptime_kuma_service
     url = (body or {}).get("url")
-    api_key = (body or {}).get("api_key")
-    result = uptime_kuma_service.test_connection(url=url, api_key=api_key)
+    username = (body or {}).get("username")
+    password = (body or {}).get("password")
+    result = uptime_kuma_service.test_connection(url=url, username=username, password=password)
     return result
 
 
@@ -133,11 +135,12 @@ def list_uptime_kuma_monitors(db: Session = Depends(get_db)):
 
 @router.post("/uptime-kuma/monitors")
 def list_uptime_kuma_monitors_inline(body: dict | None = None, db: Session = Depends(get_db)):
-    """List monitors using inline URL/key (for use before settings are saved)."""
+    """List monitors using inline credentials (for use before settings are saved)."""
     from app.services.uptime_kuma_service import uptime_kuma_service
     url = (body or {}).get("url")
-    api_key = (body or {}).get("api_key")
-    monitors = uptime_kuma_service.list_monitors(url=url, api_key=api_key)
+    username = (body or {}).get("username")
+    password = (body or {}).get("password")
+    monitors = uptime_kuma_service.list_monitors(url=url, username=username, password=password)
     return {"monitors": monitors}
 
 
