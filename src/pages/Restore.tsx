@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { RotateCcw, Search, RefreshCw, CheckCircle, Clock, Database, CalendarIcon, X, ArrowUp, ArrowDown, ArrowUpDown, Import } from "lucide-react";
+import { RotateCcw, Search, RefreshCw, CheckCircle, Clock, Database, X, ArrowUp, ArrowDown, ArrowUpDown, FileUp } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -193,7 +193,7 @@ export default function Restore() {
         description="Browse restorable backups and restore volumes from previous backups"
         action={
           <Button variant="outline" className="gap-2 border-border" onClick={() => setImportDialogOpen(true)}>
-            <Import className="h-4 w-4" /> Import Existing Backups
+            <FileUp className="h-4 w-4" /> Import Existing Backups
           </Button>
         }
       />
