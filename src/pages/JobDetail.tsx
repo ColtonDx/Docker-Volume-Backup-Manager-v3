@@ -97,7 +97,7 @@ export default function JobDetail() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <DataCard
           title="Success Rate"
-          value={`${stats.success_rate_30d}%`}
+          value={stats.success_rate_30d < 0 ? "No runs" : `${stats.success_rate_30d}%`}
           subtitle="Last 30 days"
           icon={CheckCircle}
         />

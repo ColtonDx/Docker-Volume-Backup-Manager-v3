@@ -177,7 +177,7 @@ def get_job_stats(job_id: int, db: Session = Depends(get_db)):
     recent_records = [r for r in all_records if r.started_at and r.started_at >= thirty_days_ago]
     total_recent = len(recent_records)
     success_recent = sum(1 for r in recent_records if r.status == "success")
-    success_rate = round((success_recent / total_recent * 100) if total_recent > 0 else 100.0, 1)
+    success_rate = round((success_recent / total_recent * 100) if total_recent > 0 else -1.0, 1)
 
     # Aggregated stats
     total_backups = len(all_records)

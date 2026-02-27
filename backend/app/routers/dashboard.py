@@ -28,7 +28,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     )
     total_recent = len(recent_records)
     success_recent = sum(1 for r in recent_records if r.status == "success")
-    success_rate = (success_recent / total_recent * 100) if total_recent > 0 else 100.0
+    success_rate = (success_recent / total_recent * 100) if total_recent > 0 else -1.0
 
     # Active alerts: count of error records in last 24h
     one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)

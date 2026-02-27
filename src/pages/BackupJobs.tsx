@@ -157,6 +157,9 @@ export default function BackupJobs() {
 
   const handleSave = () => {
     if (!formData.name || !formData.storage_id) return;
+    // Prevent duplicate names (case-insensitive)
+    const nameTaken = jobs.some((j) => j.name.toLowerCase() === formData.name.trim().toLowerCase() && j.id !== editingJob?.id);
+    if (nameTaken) return;
     if (editingJob) {
       updateMutation.mutate({ id: editingJob.id, data: formData });
     } else {
@@ -170,6 +173,8 @@ export default function BackupJobs() {
     deleteMutation.mutate(id);
     setDeleteId(null);
   };
+
+  const isDuplicateName = formData.name.trim() !== "" && jobs.some((j) => j.name.toLowerCase() === formData.name.trim().toLowerCase() && j.id !== editingJob?.id);
 
   return (
     <div>
@@ -189,7 +194,8 @@ export default function BackupJobs() {
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
                   <Label htmlFor="job-name">Job Name</Label>
-                  <Input id="job-name" placeholder="e.g. postgres-nightly" className="bg-background border-border" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+                  <Input id="job-name" placeholder="e.g. postgres-nightly" className={`bg-background border-border ${isDuplicateName ? "border-destructive focus-visible:ring-destructive" : ""}`} value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+                  {isDuplicateName && <p className="text-xs text-destructive">A job with this name already exists</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Docker Label</Label>
@@ -238,7 +244,7 @@ export default function BackupJobs() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleSave}>{editingJob ? "Save Changes" : "Create Job"}</Button>
+                <Button onClick={handleSave} disabled={isDuplicateName}>{editingJob ? "Save Changes" : "Create Job"}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
