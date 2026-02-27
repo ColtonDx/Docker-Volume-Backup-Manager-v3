@@ -250,3 +250,15 @@ export interface ImportBackupsResponse {
   total_found: number;
   message: string;
 }
+
+export interface JobDetailStats {
+  job: BackupJob;
+  success_rate_30d: number;
+  total_backups: number;
+  total_size_bytes: number;
+  avg_duration_seconds: number | null;
+  errors_24h: number;
+  recent_backups: BackupRecord[];
+  logs: LogEntry[];
+  schedule_info: { name: string; cron: string; next_run: string | null } | null;
+}

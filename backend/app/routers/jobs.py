@@ -1,13 +1,16 @@
 import json
+from datetime import datetime, timedelta, timezone
 from typing import List
 
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import BackupJob, BackupRecord
-from app.schemas import BackupJobCreate, BackupJobOut, BackupJobUpdate
+from app.models import BackupJob, BackupRecord, LogEntry
+from app.schemas import BackupJobCreate, BackupJobOut, BackupJobUpdate, BackupRecordOut, JobDetailStats, LogEntryOut
 from app.services.backup_service import backup_service
 from app.services.docker_service import docker_service
 from app.services.scheduler_service import scheduler_service
@@ -145,3 +148,89 @@ def resume_job(job_id: int, db: Session = Depends(get_db)):
     db.commit()
     scheduler_service.sync_jobs()
     return {"message": f"Job '{job.name}' resumed"}
+
+
+@router.get("/{job_id}/stats", response_model=JobDetailStats)
+def get_job_stats(job_id: int, db: Session = Depends(get_db)):
+    """Per-job dashboard stats: success rate, backup history, schedule, logs."""
+    job = db.query(BackupJob).get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    enriched = _enrich_job(job, db)
+
+    # All backup records for this job
+    all_records = (
+        db.query(BackupRecord)
+        .filter(BackupRecord.job_id == job.id)
+        .order_by(BackupRecord.started_at.desc())
+        .all()
+    )
+
+    # 30-day success rate
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    recent_records = [r for r in all_records if r.started_at and r.started_at >= thirty_days_ago]
+    total_recent = len(recent_records)
+    success_recent = sum(1 for r in recent_records if r.status == "success")
+    success_rate = round((success_recent / total_recent * 100) if total_recent > 0 else 100.0, 1)
+
+    # Aggregated stats
+    total_backups = len(all_records)
+    total_size = sum(r.size_bytes or 0 for r in all_records)
+    avg_duration = None
+    durations = [r.duration_seconds for r in all_records if r.duration_seconds is not None]
+    if durations:
+        avg_duration = round(sum(durations) / len(durations), 1)
+
+    # Error count in last 24h
+    one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+    errors_24h = sum(
+        1 for r in all_records
+        if r.started_at and r.started_at >= one_day_ago and r.status in ("error", "warning")
+    )
+
+    # Recent backup records (last 20)
+    recent_backups = all_records[:20]
+
+    # Recent logs for this job
+    logs = (
+        db.query(LogEntry)
+        .filter(LogEntry.job_name == job.name)
+        .order_by(LogEntry.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    # Schedule info
+    schedule_info = None
+    if job.schedule:
+        next_run = None
+        try:
+            parts = job.schedule.cron.strip().split()
+            if len(parts) == 5:
+                trigger = CronTrigger(
+                    minute=parts[0], hour=parts[1], day=parts[2],
+                    month=parts[3], day_of_week=parts[4],
+                )
+                next_fire = trigger.get_next_fire_time(None, datetime.now(timezone.utc))
+                if next_fire:
+                    next_run = next_fire.isoformat()
+        except Exception:
+            pass
+        schedule_info = {
+            "name": job.schedule.name,
+            "cron": job.schedule.cron,
+            "next_run": next_run,
+        }
+
+    return JobDetailStats(
+        job=enriched,
+        success_rate_30d=success_rate,
+        total_backups=total_backups,
+        total_size_bytes=total_size,
+        avg_duration_seconds=avg_duration,
+        errors_24h=errors_24h,
+        recent_backups=recent_backups,
+        logs=logs,
+        schedule_info=schedule_info,
+    )

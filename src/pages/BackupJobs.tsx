@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, MoreVertical, Play, Pause, Trash2, Edit, Database, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -31,6 +32,7 @@ type SortDir = "asc" | "desc";
 
 export default function BackupJobs() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [editingJob, setEditingJob] = useState<BackupJob | null>(null);
@@ -249,7 +251,7 @@ export default function BackupJobs() {
               </TableHeader>
               <TableBody>
                 {sortedJobs.map((job) => (
-                  <TableRow key={job.id} className="border-border hover:bg-muted/30">
+                  <TableRow key={job.id} className="border-border hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/jobs/${job.id}`)}>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
@@ -268,7 +270,7 @@ export default function BackupJobs() {
                     <TableCell className="text-sm text-muted-foreground">
                       {job.last_run ? new Date(job.last_run).toLocaleString() : "Never"}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>

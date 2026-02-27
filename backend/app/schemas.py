@@ -314,6 +314,18 @@ class DashboardStats(BaseModel):
     storage_usage: list[dict[str, Any]] = []
 
 
+class JobDetailStats(BaseModel):
+    job: BackupJobOut
+    success_rate_30d: float = 0.0
+    total_backups: int = 0
+    total_size_bytes: int = 0
+    avg_duration_seconds: float | None = None
+    errors_24h: int = 0
+    recent_backups: list[BackupRecordOut] = []
+    logs: list[LogEntryOut] = []
+    schedule_info: dict[str, Any] | None = None
+
+
 # ---- Docker Info ---------------------------------------------------------
 
 class ContainerInfo(BaseModel):

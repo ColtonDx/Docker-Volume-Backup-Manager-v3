@@ -18,6 +18,7 @@ import Rotations from "./pages/Rotations";
 import Logs from "./pages/Logs";
 import Restore from "./pages/Restore";
 import Settings from "./pages/Settings";
+import JobDetail from "./pages/JobDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/jobs" element={<BackupJobs />} />
+        <Route path="/jobs/:id" element={<JobDetail />} />
         <Route path="/schedules" element={<Schedules />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/storages" element={<Storages />} />

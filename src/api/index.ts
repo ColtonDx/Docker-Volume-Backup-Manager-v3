@@ -9,6 +9,7 @@ import type {
   BackupRecord,
   DashboardStats,
   ImportBackupsResponse,
+  JobDetailStats,
   LogEntry,
   MessageResponse,
   NotificationChannel,
@@ -49,6 +50,7 @@ export const fetchDashboard = () => api.get<DashboardStats>("/dashboard");
 // ---- Backup Jobs --------------------------------------------------------
 export const fetchJobs = () => api.get<BackupJob[]>("/jobs");
 export const fetchJob = (id: number) => api.get<BackupJob>(`/jobs/${id}`);
+export const fetchJobStats = (id: number) => api.get<JobDetailStats>(`/jobs/${id}/stats`);
 export const createJob = (data: BackupJobCreate) => api.post<BackupJob>("/jobs", data);
 export const updateJob = (id: number, data: BackupJobUpdate) => api.put<BackupJob>(`/jobs/${id}`, data);
 export const deleteJob = (id: number) => api.delete<void>(`/jobs/${id}`);
