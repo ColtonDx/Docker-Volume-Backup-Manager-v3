@@ -31,15 +31,15 @@ import {
 } from "@/components/ui/sidebar";
 
 const mainNavItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Overview", url: "/", icon: LayoutDashboard },
   { title: "Backup Jobs", url: "/jobs", icon: Database },
 ];
 
 const configNavItems = [
   { title: "Schedules", url: "/schedules", icon: Calendar },
   { title: "Notifications", url: "/notifications", icon: Bell },
-  { title: "Backend Storages", url: "/storages", icon: HardDrive },
-  { title: "Retention Policies", url: "/rotations", icon: RotateCcw },
+  { title: "Storages", url: "/storages", icon: HardDrive },
+  { title: "Retention", url: "/rotations", icon: RotateCcw },
 ];
 
 const systemNavItems = [

@@ -74,7 +74,7 @@ export default function Rotations() {
   return (
     <div>
       <PageHeader
-        title="Retention Policies"
+        title="Retention"
         description="Configure backup rotation and retention rules"
         action={
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditing(null); }}>
@@ -143,7 +143,7 @@ export default function Rotations() {
       {isLoading ? (
         <div className="text-center text-muted-foreground py-12">Loading policies...</div>
       ) : policies.length === 0 ? (
-        <div className="text-center text-muted-foreground py-12">No retention policies yet.</div>
+        <div className="text-center text-muted-foreground py-12">No retention policies configured.</div>
       ) : (
         <Card className="glass-panel border-border animate-fade-in">
           <CardContent className="p-0">

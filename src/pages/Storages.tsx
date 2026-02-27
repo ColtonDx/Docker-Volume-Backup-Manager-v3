@@ -110,7 +110,7 @@ export default function Storages() {
   return (
     <div>
       <PageHeader
-        title="Backend Storages"
+        title="Storages"
         description="Configure storage backends: Local FS, S3, FTP, or Rclone"
         action={
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditing(null); }}>

@@ -52,7 +52,7 @@ export default function Dashboard() {
   if (isLoading || !stats) {
     return (
       <div>
-        <PageHeader title="Dashboard" description="Overview of your Docker container backup system" />
+        <PageHeader title="Overview" description="Overview of your Docker container backup system" />
         <div className="text-center text-muted-foreground py-12">Loading dashboard...</div>
       </div>
     );
