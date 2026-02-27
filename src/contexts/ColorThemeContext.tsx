@@ -17,12 +17,12 @@ export interface ThemeOption {
 }
 
 export const THEMES: ThemeOption[] = [
-  { id: "default-blue",   label: "Default - Blue",   swatch: "bg-[hsl(192,91%,36%)]",  previewBg: "bg-[hsl(222,47%,6%)]" },
-  { id: "default-purple", label: "Default - Purple", swatch: "bg-[hsl(270,65%,50%)]",  previewBg: "bg-[hsl(270,40%,6%)]" },
-  { id: "default-red",    label: "Default - Red",    swatch: "bg-[hsl(0,72%,51%)]",    previewBg: "bg-[hsl(0,35%,6%)]" },
-  { id: "default-green",  label: "Default - Green",  swatch: "bg-[hsl(152,69%,36%)]",  previewBg: "bg-[hsl(152,35%,5%)]" },
-  { id: "cyberpunk",      label: "Cyberpunk",        swatch: "bg-[hsl(54,96%,60%)]" ,  previewBg: "bg-[hsl(230,25%,4%)]" },
-  { id: "synthwave",      label: "Synthwave",        swatch: "bg-[hsl(320,100%,60%)]" , previewBg: "bg-[hsl(265,35%,5%)]" },
+  { id: "default-blue",   label: "Blue",       swatch: "bg-[hsl(192,91%,36%)]",  previewBg: "bg-[hsl(222,47%,6%)]" },
+  { id: "default-purple", label: "Purple",     swatch: "bg-[hsl(270,65%,50%)]",  previewBg: "bg-[hsl(270,40%,6%)]" },
+  { id: "default-red",    label: "Red",        swatch: "bg-[hsl(0,72%,51%)]",    previewBg: "bg-[hsl(0,35%,6%)]" },
+  { id: "default-green",  label: "Green",      swatch: "bg-[hsl(152,69%,36%)]",  previewBg: "bg-[hsl(152,35%,5%)]" },
+  { id: "cyberpunk",      label: "Cyberpunk",  swatch: "bg-[hsl(54,96%,60%)]" ,  previewBg: "bg-[hsl(230,25%,4%)]" },
+  { id: "synthwave",      label: "Synthwave",  swatch: "bg-[hsl(320,100%,60%)]" , previewBg: "bg-[hsl(265,35%,5%)]" },
 ];
 
 const VALID_IDS = THEMES.map((t) => t.id) as string[];

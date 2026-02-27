@@ -162,8 +162,8 @@
 }
 
 /* ================================================
-   CYBERPUNK + SYNTHWAVE — shared structural effects
-   (fonts, scanlines, clipped corners, layout treatments)
+   CYBERPUNK — sharp, angular, modern
+   SYNTHWAVE — rounded, soft, retro 80s
    ================================================ */
 
 /* -- Cyberpunk font: Chakra Petch (angular, techy) + Orbitron headings -- */
@@ -240,37 +240,54 @@
   mix-blend-mode: overlay;
 }
 
-/* -- Clipped corners on buttons (shared) -- */
+/* -- CYBERPUNK buttons: sharp clipped corners -- */
 [data-theme="cyberpunk"] button[class*="bg-primary"],
-[data-theme="cyberpunk"] [role="button"][class*="bg-primary"],
-[data-theme="synthwave"] button[class*="bg-primary"],
-[data-theme="synthwave"] [role="button"][class*="bg-primary"] {
+[data-theme="cyberpunk"] [role="button"][class*="bg-primary"] {
   clip-path: polygon(0 4px, 4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px));
   text-transform: uppercase;
   font-weight: 600;
   letter-spacing: 0.1em;
+  border-radius: 0;
 }
 
-/* -- Input bottom-border styling (shared) -- */
+/* -- SYNTHWAVE buttons: rounded pill, retro feel -- */
+[data-theme="synthwave"] button[class*="bg-primary"],
+[data-theme="synthwave"] [role="button"][class*="bg-primary"] {
+  border-radius: 9999px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding-left: 1.5em;
+  padding-right: 1.5em;
+}
+
+/* -- CYBERPUNK inputs: sharp, flat -- */
 [data-theme="cyberpunk"] input,
 [data-theme="cyberpunk"] textarea,
 [data-theme="cyberpunk"] select,
-[data-theme="cyberpunk"] [role="combobox"],
+[data-theme="cyberpunk"] [role="combobox"] {
+  border-radius: 0;
+  transition: border-color 0.2s;
+}
+
+/* -- SYNTHWAVE inputs: softly rounded -- */
 [data-theme="synthwave"] input,
 [data-theme="synthwave"] textarea,
 [data-theme="synthwave"] select,
 [data-theme="synthwave"] [role="combobox"] {
-  border-radius: 2px;
+  border-radius: 0.5rem;
   transition: border-color 0.2s;
 }
 
-/* -- Table header styling -- */
+/* -- CYBERPUNK table headers -- */
 [data-theme="cyberpunk"] th {
   font-family: 'Orbitron', 'Chakra Petch', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-size: 0.7rem;
 }
+
+/* -- SYNTHWAVE table headers -- */
 [data-theme="synthwave"] th {
   font-family: 'Righteous', 'Quicksand', sans-serif;
   text-transform: uppercase;
@@ -278,15 +295,22 @@
   font-size: 0.72rem;
 }
 
-/* -- Badge clipped corners (shared) -- */
+/* -- CYBERPUNK badges: sharp clipped corners -- */
 [data-theme="cyberpunk"] [class*="Badge"],
-[data-theme="cyberpunk"] [class*="badge"],
-[data-theme="synthwave"] [class*="Badge"],
-[data-theme="synthwave"] [class*="badge"] {
+[data-theme="cyberpunk"] [class*="badge"] {
   clip-path: polygon(0 3px, 3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 0 calc(100% - 3px));
   border-radius: 0;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* -- SYNTHWAVE badges: rounded pill -- */
+[data-theme="synthwave"] [class*="Badge"],
+[data-theme="synthwave"] [class*="badge"] {
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   font-weight: 600;
 }
 
@@ -297,17 +321,22 @@
   height: 6px;
 }
 
-/* -- Popover/dropdown clipped corners (shared) -- */
-[data-theme="cyberpunk"] [data-radix-popper-content-wrapper] > div,
-[data-theme="synthwave"] [data-radix-popper-content-wrapper] > div {
+/* -- CYBERPUNK popover: clipped corners -- */
+[data-theme="cyberpunk"] [data-radix-popper-content-wrapper] > div {
   clip-path: polygon(
     0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px,
     100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px)
   );
 }
 
+/* -- SYNTHWAVE popover: rounded -- */
+[data-theme="synthwave"] [data-radix-popper-content-wrapper] > div {
+  border-radius: 0.75rem;
+}
+
 /* ================================================
-   CYBERPUNK — neon-yellow colour-specific effects
+   CYBERPUNK — yellow / electric-blue / gray tricolor
+   Sharp, modern, angular
    ================================================ */
 
 /* -- Noise texture on cards -- */
@@ -315,7 +344,7 @@
   background-image:
     linear-gradient(135deg, hsl(230 30% 10% / 0.9), hsl(230 30% 6% / 0.95)),
     url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-  border-color: hsl(54 96% 60% / 0.15);
+  border-color: hsl(200 100% 50% / 0.12);
   border-width: 1px;
   backdrop-filter: blur(12px);
   clip-path: polygon(
@@ -327,18 +356,20 @@
 [data-theme="cyberpunk"] .glow-primary {
   box-shadow:
     0 0 8px hsl(54 96% 60% / 0.5),
-    0 0 24px hsl(54 96% 60% / 0.25),
-    0 0 48px hsl(54 96% 60% / 0.1);
+    0 0 24px hsl(54 96% 60% / 0.2),
+    0 0 48px hsl(200 100% 50% / 0.1);
 }
 
 [data-theme="cyberpunk"] [data-sidebar] {
-  border-right: 2px solid hsl(54 96% 60% / 0.25);
-  box-shadow: inset -1px 0 12px hsl(54 96% 60% / 0.05);
+  border-right: 2px solid hsl(200 100% 50% / 0.2);
+  box-shadow: inset -1px 0 12px hsl(200 100% 50% / 0.04);
+  padding-right: 0.5rem;
 }
 
 [data-theme="cyberpunk"] [data-sidebar] a.bg-primary\/10 {
   border-left: 3px solid hsl(54 96% 60% / 0.8);
   box-shadow: inset 4px 0 8px hsl(54 96% 60% / 0.1);
+  margin-right: 0.25rem;
 }
 
 [data-theme="cyberpunk"] button[class*="bg-primary"],
@@ -350,21 +381,21 @@
 [data-theme="cyberpunk"] textarea,
 [data-theme="cyberpunk"] select,
 [data-theme="cyberpunk"] [role="combobox"] {
-  border-bottom: 2px solid hsl(54 96% 60% / 0.3);
+  border-bottom: 2px solid hsl(200 100% 50% / 0.25);
 }
 [data-theme="cyberpunk"] input:focus,
 [data-theme="cyberpunk"] textarea:focus,
 [data-theme="cyberpunk"] select:focus,
 [data-theme="cyberpunk"] [role="combobox"]:focus {
-  border-bottom-color: hsl(54 96% 60% / 0.8);
-  box-shadow: 0 2px 8px hsl(54 96% 60% / 0.15);
+  border-bottom-color: hsl(200 100% 50% / 0.7);
+  box-shadow: 0 2px 8px hsl(200 100% 50% / 0.15);
 }
 
 [data-theme="cyberpunk"] tr {
-  border-bottom: 1px solid hsl(54 96% 60% / 0.08);
+  border-bottom: 1px solid hsl(200 100% 50% / 0.06);
 }
 [data-theme="cyberpunk"] th {
-  color: hsl(54 96% 60% / 0.7);
+  color: hsl(200 100% 50% / 0.6);
 }
 
 [data-theme="cyberpunk"] .status-dot-active {
@@ -381,29 +412,29 @@
   background: hsl(230 25% 4%);
 }
 [data-theme="cyberpunk"] ::-webkit-scrollbar-thumb {
-  background: hsl(54 96% 60% / 0.25);
+  background: hsl(200 100% 50% / 0.2);
   border-radius: 0;
 }
 [data-theme="cyberpunk"] ::-webkit-scrollbar-thumb:hover {
-  background: hsl(54 96% 60% / 0.5);
+  background: hsl(200 100% 50% / 0.45);
 }
 
 [data-theme="cyberpunk"] .text-gradient {
-  background: linear-gradient(90deg, hsl(54 96% 60%), hsl(340 100% 55%));
+  background: linear-gradient(90deg, hsl(54 96% 60%), hsl(200 100% 50%));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 [data-theme="cyberpunk"] [data-radix-popper-content-wrapper] > div {
-  border: 1px solid hsl(54 96% 60% / 0.2);
+  border: 1px solid hsl(200 100% 50% / 0.15);
 }
 
 /* ================================================
-   SYNTHWAVE — neon-pink / sunset colour-specific effects
+   SYNTHWAVE — neon-pink / cyan, rounded retro 80s
    ================================================ */
 
-/* -- Noise texture on cards (purple-tinted, cyan border) -- */
+/* -- Cards: rounded, soft glow -- */
 [data-theme="synthwave"] .glass-panel {
   background-image:
     linear-gradient(135deg, hsl(265 35% 11% / 0.9), hsl(250 40% 7% / 0.95)),
@@ -411,10 +442,8 @@
   border-color: hsl(185 90% 50% / 0.12);
   border-width: 1px;
   backdrop-filter: blur(12px);
-  clip-path: polygon(
-    0 8px, 8px 0, calc(100% - 8px) 0, 100% 8px,
-    100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px)
-  );
+  border-radius: 0.75rem;
+  clip-path: none;
 }
 
 [data-theme="synthwave"] .glow-primary {
@@ -475,7 +504,7 @@
 }
 [data-theme="synthwave"] ::-webkit-scrollbar-thumb {
   background: hsl(185 90% 50% / 0.2);
-  border-radius: 0;
+  border-radius: 9999px;
 }
 [data-theme="synthwave"] ::-webkit-scrollbar-thumb:hover {
   background: hsl(185 90% 50% / 0.45);
@@ -490,6 +519,7 @@
 
 [data-theme="synthwave"] [data-radix-popper-content-wrapper] > div {
   border: 1px solid hsl(185 90% 50% / 0.18);
+  border-radius: 0.75rem;
 }
 
 /* ================================================
@@ -614,15 +644,15 @@
   --chart-1: 152 69% 46%;
 }
 
-/* ---------- Cyberpunk 2077 ---------- */
+/* ---------- Cyberpunk ---------- */
 [data-theme="cyberpunk"] {
   --primary: 54 96% 60%;
   --primary-foreground: 0 0% 0%;
-  --accent: 340 100% 50%;
+  --accent: 200 100% 50%;
   --accent-foreground: 0 0% 100%;
-  --ring: 54 96% 60%;
+  --ring: 200 100% 50%;
   --sidebar-primary: 54 96% 60%;
-  --sidebar-ring: 54 96% 60%;
+  --sidebar-ring: 200 100% 50%;
   --chart-1: 54 96% 60%;
 }
 .dark[data-theme="cyberpunk"],
@@ -639,7 +669,7 @@
   --secondary-foreground: 54 20% 92%;
   --muted: 230 20% 12%;
   --muted-foreground: 230 10% 50%;
-  --accent: 340 100% 55%;
+  --accent: 200 100% 50%;
   --accent-foreground: 0 0% 100%;
   --destructive: 340 100% 55%;
   --destructive-foreground: 54 20% 92%;
@@ -647,21 +677,21 @@
   --success-foreground: 230 25% 4%;
   --warning: 54 96% 60%;
   --warning-foreground: 230 25% 4%;
-  --border: 230 30% 16%;
+  --border: 200 30% 18%;
   --input: 230 30% 14%;
-  --ring: 54 96% 60%;
+  --ring: 200 100% 50%;
   --sidebar-background: 230 30% 5%;
-  --sidebar-foreground: 230 10% 55%;
+  --sidebar-foreground: 200 40% 55%;
   --sidebar-primary: 54 96% 60%;
   --sidebar-primary-foreground: 230 25% 4%;
   --sidebar-accent: 230 20% 12%;
   --sidebar-accent-foreground: 54 20% 92%;
-  --sidebar-border: 230 30% 16%;
-  --sidebar-ring: 54 96% 60%;
+  --sidebar-border: 200 30% 18%;
+  --sidebar-ring: 200 100% 50%;
   --chart-1: 54 96% 60%;
-  --chart-2: 340 100% 55%;
-  --chart-3: 185 90% 48%;
-  --chart-4: 160 90% 42%;
+  --chart-2: 200 100% 50%;
+  --chart-3: 160 90% 42%;
+  --chart-4: 340 100% 55%;
   --chart-5: 270 80% 60%;
   --radius: 0.15rem;
 }
@@ -715,5 +745,5 @@
   --chart-3: 35 95% 55%;
   --chart-4: 270 80% 60%;
   --chart-5: 54 96% 60%;
-  --radius: 0.15rem;
+  --radius: 0.5rem;
 }
