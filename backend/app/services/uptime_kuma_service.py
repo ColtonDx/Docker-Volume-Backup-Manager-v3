@@ -72,13 +72,13 @@ class UptimeKumaService:
     ) -> str:
         """Log in to Uptime Kuma and return a Bearer token.
 
-        Uptime Kuma exposes ``POST /login/access-token`` which accepts
-        ``{"username": "…", "password": "…"}`` and returns
-        ``{"token": "…"}``.
+        Uptime Kuma exposes ``POST /api/login`` which accepts
+        ``{"username": "…", "password": "…", "token": ""}`` and returns
+        ``{"token": "…"}``.  The ``token`` field is for 2FA (empty to skip).
         """
         resp = client.post(
-            f"{base}/login/access-token",
-            json={"username": username, "password": password},
+            f"{base}/api/login",
+            json={"username": username, "password": password, "token": ""},
         )
         resp.raise_for_status()
         data = self._parse_json_response(resp)
