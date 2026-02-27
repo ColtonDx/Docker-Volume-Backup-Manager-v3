@@ -243,3 +243,10 @@ export interface TestResponse {
   success: boolean;
   message: string;
 }
+
+export interface ImportBackupsResponse {
+  imported: number;
+  skipped: number;
+  total_found: number;
+  message: string;
+}

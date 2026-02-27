@@ -1,7 +1,7 @@
 services:
-  backup-buddy:
+  docker-volume-backup-manager:
     build: .
-    container_name: backup-buddy
+    container_name: docker-volume-backup-manager
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -9,9 +9,9 @@ services:
       # Required: Docker socket so we can manage containers
       - /var/run/docker.sock:/var/run/docker.sock
       # Persistent data (SQLite database)
-      - backup-buddy-data:/data
+      - data:/data
       # Temp directory for building archives before upload
-      - backup-buddy-temp:/backups
+      - temp:/backups
       # Optional: local backup storage directory
       - ./local-backups:/local-backups
       # Optional: mount your rclone config
@@ -30,5 +30,5 @@ services:
       # - RCLONE_BINARY=/usr/bin/rclone
 
 volumes:
-  backup-buddy-data:
-  backup-buddy-temp:
+  data:
+  temp:

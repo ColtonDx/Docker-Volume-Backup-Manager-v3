@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { RotateCcw, Search, RefreshCw, CheckCircle, Clock, Database, CalendarIcon, X, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { RotateCcw, Search, RefreshCw, CheckCircle, Clock, Database, CalendarIcon, X, ArrowUp, ArrowDown, ArrowUpDown, Import } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -33,7 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchBackups, restoreBackup, fetchJobs } from "@/api";
+import { fetchBackups, restoreBackup, fetchJobs, importBackups } from "@/api";
 import type { BackupRecord } from "@/api/types";
 
 function formatSize(bytes: number | null): string {
@@ -64,6 +64,8 @@ export default function Restore() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [restoreId, setRestoreId] = useState<number | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importJobId, setImportJobId] = useState<string>("");
 
   // Sorting
   type SortKey = "id" | "job_name" | "status" | "size_bytes" | "duration_seconds" | "volumes" | "started_at";
@@ -112,6 +114,21 @@ export default function Restore() {
       toast.success(`Restore initiated from backup #${id}`);
       queryClient.invalidateQueries({ queryKey: ["backups"] });
       queryClient.invalidateQueries({ queryKey: ["logs"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const importMutation = useMutation({
+    mutationFn: (jobId: number) => importBackups(jobId),
+    onSuccess: (data) => {
+      if (data.imported > 0) {
+        toast.success(data.message);
+      } else {
+        toast.info(data.message);
+      }
+      queryClient.invalidateQueries({ queryKey: ["backups"] });
+      setImportDialogOpen(false);
+      setImportJobId("");
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -174,6 +191,11 @@ export default function Restore() {
       <PageHeader
         title="Restore"
         description="Browse restorable backups and restore volumes from previous backups"
+        action={
+          <Button variant="outline" className="gap-2 border-border" onClick={() => setImportDialogOpen(true)}>
+            <Import className="h-4 w-4" /> Import Existing Backups
+          </Button>
+        }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -372,6 +394,44 @@ export default function Restore() {
               }}
             >
               Restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={importDialogOpen} onOpenChange={(open) => { if (!open) { setImportDialogOpen(false); setImportJobId(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import Existing Backups</AlertDialogTitle>
+            <AlertDialogDescription>
+              Scan a job's storage backend for existing backup archives and import them as restorable records.
+              Select a backup job to scan its configured storage for files matching <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{job_name}"}_{"{timestamp}"}.tar.gz</code>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <Label className="text-sm font-medium">Backup Job</Label>
+            <Select value={importJobId} onValueChange={setImportJobId}>
+              <SelectTrigger className="mt-1.5 bg-background border-border">
+                <SelectValue placeholder="Select a job..." />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border">
+                {jobs.map((job) => (
+                  <SelectItem key={job.id} value={String(job.id)}>{job.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!importJobId || importMutation.isPending}
+              onClick={() => {
+                if (importJobId) {
+                  importMutation.mutate(Number(importJobId));
+                }
+              }}
+            >
+              {importMutation.isPending ? "Scanning..." : "Scan & Import"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -54,6 +54,17 @@ class StorageService:
         return handler["test"](config)
 
     # ------------------------------------------------------------------
+    # List files
+    # ------------------------------------------------------------------
+
+    def list_files(self, backend_type: str, config: dict[str, Any], prefix: str = "") -> list[dict[str, Any]]:
+        """List files on the storage backend. Returns list of {name, size, path}."""
+        handler = self._get_handler(backend_type)
+        if "list" not in handler:
+            raise NotImplementedError(f"list_files not supported for {backend_type}")
+        return handler["list"](config, prefix)
+
+    # ------------------------------------------------------------------
     # Handler registry
     # ------------------------------------------------------------------
 
@@ -64,24 +75,28 @@ class StorageService:
                 "download": self._localfs_download,
                 "delete": self._localfs_delete,
                 "test": self._localfs_test,
+                "list": self._localfs_list,
             },
             "s3": {
                 "upload": self._s3_upload,
                 "download": self._s3_download,
                 "delete": self._s3_delete,
                 "test": self._s3_test,
+                "list": self._s3_list,
             },
             "ftp": {
                 "upload": self._ftp_upload,
                 "download": self._ftp_download,
                 "delete": self._ftp_delete,
                 "test": self._ftp_test,
+                "list": self._ftp_list,
             },
             "rclone": {
                 "upload": self._rclone_upload,
                 "download": self._rclone_download,
                 "delete": self._rclone_delete,
                 "test": self._rclone_test,
+                "list": self._rclone_list,
             },
         }
         if backend_type not in handlers:
@@ -131,6 +146,27 @@ class StorageService:
             return True, f"Local path '{path}' is writable"
         except Exception as exc:
             return False, str(exc)
+
+    @staticmethod
+    def _localfs_list(config: dict, prefix: str = "") -> list[dict]:
+        base = config.get("path", "/backups")
+        results = []
+        if not os.path.isdir(base):
+            return results
+        for name in os.listdir(base):
+            full = os.path.join(base, name)
+            if not os.path.isfile(full):
+                continue
+            if prefix and not name.startswith(prefix):
+                continue
+            if not name.endswith(".tar.gz"):
+                continue
+            try:
+                size = os.path.getsize(full)
+            except OSError:
+                size = 0
+            results.append({"name": name, "size": size, "path": full})
+        return results
 
     # ==================================================================
     # S3
@@ -206,6 +242,36 @@ class StorageService:
             return True, f"S3 bucket '{bucket}' is accessible"
         except Exception as exc:
             return False, str(exc)
+
+    @staticmethod
+    def _s3_list(config: dict, prefix: str = "") -> list[dict]:
+        import boto3
+
+        client = boto3.client(
+            "s3",
+            region_name=config.get("region", "us-east-1"),
+            aws_access_key_id=config.get("access_key_id"),
+            aws_secret_access_key=config.get("secret_access_key"),
+            endpoint_url=config.get("endpoint_url") or None,
+        )
+        bucket = config["bucket"]
+        s3_prefix = config.get("prefix", "").strip("/")
+        if prefix:
+            s3_prefix = f"{s3_prefix}/{prefix}" if s3_prefix else prefix
+        results = []
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=s3_prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                name = key.rsplit("/", 1)[-1]
+                if not name.endswith(".tar.gz"):
+                    continue
+                results.append({
+                    "name": name,
+                    "size": obj.get("Size", 0),
+                    "path": f"s3://{bucket}/{key}",
+                })
+        return results
 
     # ==================================================================
     # FTP / SFTP
@@ -332,6 +398,67 @@ class StorageService:
         except Exception as exc:
             return False, str(exc)
 
+    @staticmethod
+    def _ftp_list(config: dict, prefix: str = "") -> list[dict]:
+        use_sftp = config.get("use_sftp", False)
+        remote_dir = config.get("path", "/backups")
+        results = []
+
+        if use_sftp:
+            import paramiko
+
+            transport = paramiko.Transport((config["host"], config.get("port", 22)))
+            transport.connect(username=config.get("username", ""), password=config.get("password", ""))
+            sftp = paramiko.SFTPClient.from_transport(transport)
+            try:
+                for attr in sftp.listdir_attr(remote_dir):
+                    if not attr.filename.endswith(".tar.gz"):
+                        continue
+                    if prefix and not attr.filename.startswith(prefix):
+                        continue
+                    results.append({
+                        "name": attr.filename,
+                        "size": attr.st_size or 0,
+                        "path": f"{remote_dir}/{attr.filename}",
+                    })
+            finally:
+                sftp.close()
+                transport.close()
+        else:
+            from ftplib import FTP, FTP_TLS
+
+            ftp_class = FTP_TLS if config.get("use_tls", False) else FTP
+            ftp = ftp_class()
+            ftp.connect(config["host"], config.get("port", 21))
+            ftp.login(config.get("username", ""), config.get("password", ""))
+            if config.get("use_tls"):
+                ftp.prot_p()
+            try:
+                entries = []
+                ftp.retrlines(f"LIST {remote_dir}", entries.append)
+                for entry in entries:
+                    parts = entry.split(None, 8)
+                    if len(parts) < 9:
+                        continue
+                    name = parts[8]
+                    if not name.endswith(".tar.gz"):
+                        continue
+                    if prefix and not name.startswith(prefix):
+                        continue
+                    try:
+                        size = int(parts[4])
+                    except (ValueError, IndexError):
+                        size = 0
+                    results.append({
+                        "name": name,
+                        "size": size,
+                        "path": f"{remote_dir}/{name}",
+                    })
+            finally:
+                ftp.quit()
+
+        return results
+
     # ==================================================================
     # Rclone
     # ==================================================================
@@ -393,6 +520,44 @@ class StorageService:
             return False, result.stderr.strip()
         except Exception as exc:
             return False, str(exc)
+
+    @staticmethod
+    def _rclone_list(config: dict, prefix: str = "") -> list[dict]:
+        from app.config import settings
+
+        remote = config.get("remote_name", "")
+        remote_dir = config.get("path", "").rstrip("/")
+        target = f"{remote}:{remote_dir}" if remote_dir else f"{remote}:"
+        cmd = [
+            settings.RCLONE_BINARY, "lsjson", target,
+            "--config", settings.RCLONE_CONFIG,
+            "--no-modtime",
+        ]
+        extra_flags = config.get("flags", "")
+        if extra_flags:
+            cmd.extend(extra_flags.split())
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            raise RuntimeError(f"rclone lsjson failed: {result.stderr}")
+
+        import json as _json
+        items = _json.loads(result.stdout)
+        results = []
+        for item in items:
+            if item.get("IsDir"):
+                continue
+            name = item.get("Name", "")
+            if not name.endswith(".tar.gz"):
+                continue
+            if prefix and not name.startswith(prefix):
+                continue
+            path_part = f"{remote_dir}/{name}" if remote_dir else name
+            results.append({
+                "name": name,
+                "size": item.get("Size", 0),
+                "path": f"{remote}:{path_part}",
+            })
+        return results
 
 
 storage_service = StorageService()

@@ -8,6 +8,7 @@ import type {
   BackupJobUpdate,
   BackupRecord,
   DashboardStats,
+  ImportBackupsResponse,
   LogEntry,
   MessageResponse,
   NotificationChannel,
@@ -92,6 +93,7 @@ export const fetchBackups = (params?: { job_id?: number; status?: string; limit?
 export const fetchBackup = (id: number) => api.get<BackupRecord>(`/backups/${id}`);
 export const restoreBackup = (id: number) => api.post<MessageResponse>(`/backups/${id}/restore`);
 export const deleteBackup = (id: number) => api.delete<void>(`/backups/${id}`);
+export const importBackups = (jobId: number) => api.post<ImportBackupsResponse>(`/backups/import?job_id=${jobId}`);
 
 // ---- Logs ---------------------------------------------------------------
 export const fetchLogs = (params?: { level?: string; job_name?: string; search?: string; limit?: number }) => {
