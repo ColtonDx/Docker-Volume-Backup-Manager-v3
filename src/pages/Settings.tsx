@@ -54,7 +54,10 @@ export default function Settings() {
   });
 
   const testKumaMut = useMutation({
-    mutationFn: () => testUptimeKuma(),
+    mutationFn: () => testUptimeKuma({
+      url: (form.uptime_kuma_url as string) || undefined,
+      api_key: (form.uptime_kuma_api_key as string) || undefined,
+    }),
     onSuccess: (res) => { res.success ? toast.success(res.message) : toast.error(res.message); },
     onError: (err: Error) => toast.error(err.message),
   });

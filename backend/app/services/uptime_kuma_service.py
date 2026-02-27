@@ -59,6 +59,30 @@ class UptimeKumaService:
         """Normalise the base URL (strip trailing slash)."""
         return url.rstrip("/")
 
+    @staticmethod
+    def _parse_json_response(resp: httpx.Response) -> Any:
+        """Safely parse a JSON response, raising a clear error on failure."""
+        content_type = resp.headers.get("content-type", "")
+        body = resp.text
+        if not body or not body.strip():
+            raise ValueError(
+                f"Uptime Kuma returned an empty response (HTTP {resp.status_code}). "
+                "Check that the URL is correct and points to the Uptime Kuma API."
+            )
+        if "application/json" not in content_type and body.lstrip().startswith("<"):
+            raise ValueError(
+                f"Uptime Kuma returned HTML instead of JSON (HTTP {resp.status_code}). "
+                "This usually means the URL is wrong or the instance requires login. "
+                "Ensure the URL points directly to Uptime Kuma (e.g. http://uptime-kuma:3001)."
+            )
+        try:
+            return resp.json()
+        except Exception:
+            raise ValueError(
+                f"Uptime Kuma returned an unexpected response (HTTP {resp.status_code}): "
+                f"{body[:200]}"
+            )
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -101,9 +125,9 @@ class UptimeKumaService:
         try:
             with httpx.Client(timeout=15) as client:
                 # 1. Create the maintenance window
-                resp = client.post(f"{base}/api/maintenance", json=payload, headers=headers)
+                resp = client.post(f"{base}/api/maintenances", json=payload, headers=headers)
                 resp.raise_for_status()
-                data = resp.json()
+                data = self._parse_json_response(resp)
                 maintenance_id: int = data.get("maintenance", {}).get("id") or data.get("id")
                 if not maintenance_id:
                     logger.error("Uptime Kuma did not return a maintenance ID: %s", data)
@@ -117,7 +141,7 @@ class UptimeKumaService:
                 # 2. Attach the monitor to this maintenance window
                 monitors_payload = {"monitors": [monitor_id]}
                 monitor_resp = client.post(
-                    f"{base}/api/maintenance/{maintenance_id}/monitors",
+                    f"{base}/api/maintenances/{maintenance_id}/monitors",
                     json=monitors_payload,
                     headers=headers,
                 )
@@ -155,7 +179,7 @@ class UptimeKumaService:
 
         try:
             with httpx.Client(timeout=15) as client:
-                resp = client.delete(f"{base}/api/maintenance/{maintenance_id}", headers=headers)
+                resp = client.delete(f"{base}/api/maintenances/{maintenance_id}", headers=headers)
                 resp.raise_for_status()
                 logger.info("Deleted Uptime Kuma maintenance #%d", maintenance_id)
         except httpx.HTTPStatusError as exc:
@@ -166,19 +190,27 @@ class UptimeKumaService:
         except Exception as exc:
             logger.warning("Failed to end Uptime Kuma maintenance #%d: %s", maintenance_id, exc)
 
-    def list_monitors(self) -> list[dict[str, Any]]:
+    def list_monitors(
+        self,
+        url: str | None = None,
+        api_key: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Fetch the list of monitors from Uptime Kuma.
 
-        Returns a list of dicts with at least ``id`` and ``name`` keys.
+        If *url* / *api_key* are passed they are used directly (for testing
+        before the settings have been saved).  Otherwise the values stored in
+        the database are used.
         """
-        settings = self._get_settings()
-        if not self._is_enabled(settings):
-            return []
-
-        base = self._base_url(settings["uptime_kuma_url"])
-        api_key = settings.get("uptime_kuma_api_key", "")
-        if not api_key:
-            return []
+        if url and api_key:
+            base = self._base_url(url)
+        else:
+            settings = self._get_settings()
+            if not self._is_enabled(settings):
+                return []
+            base = self._base_url(settings["uptime_kuma_url"])
+            api_key = settings.get("uptime_kuma_api_key", "")
+            if not api_key:
+                return []
 
         headers = self._headers(api_key)
 
@@ -186,7 +218,7 @@ class UptimeKumaService:
             with httpx.Client(timeout=15) as client:
                 resp = client.get(f"{base}/api/monitors", headers=headers)
                 resp.raise_for_status()
-                data = resp.json()
+                data = self._parse_json_response(resp)
                 # Uptime Kuma returns {"monitors": [...]} or a list directly
                 monitors = data if isinstance(data, list) else data.get("monitors", [])
                 return [
@@ -198,19 +230,28 @@ class UptimeKumaService:
             logger.error("Failed to list Uptime Kuma monitors: %s", exc)
             return []
 
-    def test_connection(self) -> dict[str, Any]:
+    def test_connection(
+        self,
+        url: str | None = None,
+        api_key: str | None = None,
+    ) -> dict[str, Any]:
         """Verify connectivity to Uptime Kuma.
+
+        If *url* / *api_key* are passed they are used directly (handy for
+        testing from the Settings page before saving).
 
         Returns ``{"success": True/False, "message": "..."}``
         """
-        settings = self._get_settings()
-        if not self._is_enabled(settings):
-            return {"success": False, "message": "Uptime Kuma integration is not enabled"}
-
-        base = self._base_url(settings["uptime_kuma_url"])
-        api_key = settings.get("uptime_kuma_api_key", "")
-        if not api_key:
-            return {"success": False, "message": "API key is not configured"}
+        if url and api_key:
+            base = self._base_url(url)
+        else:
+            settings = self._get_settings()
+            if not self._is_enabled(settings):
+                return {"success": False, "message": "Uptime Kuma integration is not enabled. Save your settings first, or provide a URL and API key."}
+            base = self._base_url(settings["uptime_kuma_url"])
+            api_key = settings.get("uptime_kuma_api_key", "")
+            if not api_key:
+                return {"success": False, "message": "API key is not configured"}
 
         headers = self._headers(api_key)
 
@@ -218,7 +259,7 @@ class UptimeKumaService:
             with httpx.Client(timeout=10) as client:
                 resp = client.get(f"{base}/api/monitors", headers=headers)
                 resp.raise_for_status()
-                data = resp.json()
+                data = self._parse_json_response(resp)
                 monitors = data if isinstance(data, list) else data.get("monitors", [])
                 return {
                     "success": True,
