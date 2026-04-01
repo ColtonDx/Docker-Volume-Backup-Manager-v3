@@ -149,35 +149,51 @@ class NotificationService:
 
     @staticmethod
     def _send_discord(config: dict, job_name: str, event: str, message: str) -> None:
-        webhook_url = config.get("webhook_url", "")
+        webhook_url = config.get("webhook_url", "").strip()
         if not webhook_url:
             raise ValueError("Discord webhook URL not configured")
 
         color_map = {"success": 0x22C55E, "failure": 0xEF4444, "warning": 0xF59E0B}
         color = color_map.get(event, 0x3B82F6)
 
+        # Discord timestamps must be ISO 8601 with explicit UTC offset.
+        # Truncate microseconds — Discord rejects timestamps with sub-second precision.
+        ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+        # Truncate fields to Discord's documented limits to avoid 400 errors:
+        #   embed title: 256 chars, description: 4096 chars, field value: 1024 chars
+        #   username: 80 chars
         payload = {
             "embeds": [
                 {
-                    "title": f"Backup Buddy \u2013 {event.upper()}",
-                    "description": message,
+                    "title": f"Backup Buddy \u2013 {event.upper()}"[:256],
+                    "description": message[:4096],
                     "color": color,
                     "fields": [
-                        {"name": "Job", "value": job_name, "inline": True},
-                        {"name": "Event", "value": event, "inline": True},
+                        {"name": "Job", "value": job_name[:1024], "inline": True},
+                        {"name": "Event", "value": event[:1024], "inline": True},
                     ],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": ts,
                 }
             ],
-            "username": config.get("username", "Backup Buddy"),
+            "username": config.get("username", "Backup Buddy")[:80],
         }
 
-        avatar_url = config.get("avatar_url")
+        avatar_url = config.get("avatar_url", "").strip()
         if avatar_url:
             payload["avatar_url"] = avatar_url
 
         resp = httpx.post(webhook_url, json=payload, timeout=10)
-        resp.raise_for_status()
+
+        # Discord returns 204 No Content on success; any non-2xx is a failure.
+        if not resp.is_success:
+            # Surface the response body so the real reason is visible in logs.
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise ValueError(f"Discord webhook returned {resp.status_code}: {detail}")
+
         logger.info("Discord notification sent")
 
     # ------------------------------------------------------------------
