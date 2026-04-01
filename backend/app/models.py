@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -93,6 +94,12 @@ class BackupJob(Base):
 # ---------------------------------------------------------------------------
 class BackupRecord(Base):
     __tablename__ = "backup_records"
+    __table_args__ = (
+        # job_id: filtered in almost every query
+        # started_at: ordered/filtered in date-range queries
+        Index("ix_backup_records_job_id", "job_id"),
+        Index("ix_backup_records_started_at", "started_at"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(Integer, ForeignKey("backup_jobs.id"), nullable=False)
@@ -116,6 +123,12 @@ class BackupRecord(Base):
 # ---------------------------------------------------------------------------
 class LogEntry(Base):
     __tablename__ = "log_entries"
+    __table_args__ = (
+        # created_at: ordered in every log query
+        # job_name: filtered on the logs page and in per-job stats
+        Index("ix_log_entries_created_at", "created_at"),
+        Index("ix_log_entries_job_name", "job_name"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     level = Column(String, nullable=False)  # info | success | warning | error
