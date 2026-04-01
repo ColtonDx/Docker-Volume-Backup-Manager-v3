@@ -1,6 +1,6 @@
 services:
   docker-volume-backup-manager:
-    image: coltondx/docker-volume-backup-manager-v3:latest
+    build: .
     container_name: docker-volume-backup-manager
     restart: unless-stopped
     ports:

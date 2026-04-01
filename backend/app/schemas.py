@@ -132,7 +132,7 @@ class RetentionPolicyOut(RetentionPolicyBase):
 
 class BackupJobBase(BaseModel):
     name: str
-    label_key: str = "backup-buddy.job"
+    label_key: str = "dvbm.job"
     label_value: str = ""
     storage_id: int
     schedule_id: int | None = None
@@ -157,7 +157,7 @@ class BackupJobUpdate(BaseModel):
 class BackupJobOut(BaseModel):
     id: int
     name: str
-    label_key: str = "backup-buddy.job"
+    label_key: str = "dvbm.job"
     label_value: str = ""
     label: str = ""  # computed: "{label_key}={label_value}"
     enabled: bool

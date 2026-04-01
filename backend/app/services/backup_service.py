@@ -172,7 +172,7 @@ class BackupService:
             dur_str = f"{duration:.0f}s"
             self._log(
                 db, "success", job.name,
-                f"Backup completed successfully",
+                "Backup completed successfully",
                 f"Size: {size_str} | Duration: {dur_str} | Storage: {storage.name}"
             )
 
@@ -209,15 +209,10 @@ class BackupService:
             self._log(db, "error", job_name, f"Backup failed: {exc}")
             notification_service.notify_event("failure", job_name, str(exc))
 
-            # Try to restart any stopped containers
-            try:
-                from app.services.docker_service import docker_service as ds
-                from app.config import settings as s
-                if record and record.containers_stopped:
-                    names = json.loads(record.containers_stopped)
-                    # We don't have IDs stored, containers will be auto-cleaned
-            except Exception:
-                pass
+            # Note: containers that were stopped before the failure are not restarted
+            # here because their IDs are not reliably available at this point.
+            # They will remain stopped and must be restarted manually or on next
+            # scheduled backup run.
 
         finally:
             db.close()

@@ -95,7 +95,7 @@ class NotificationService:
         port = config.get("smtp_port", 587)
         username = config.get("smtp_username", "")
         password = config.get("smtp_password", "")
-        from_addr = config.get("from_address", f"backup-buddy@{host}")
+        from_addr = config.get("from_address", f"dvbm@{host}")
         to_addrs = config.get("to_addresses", [])
         use_tls = config.get("use_tls", True)
 
@@ -191,7 +191,7 @@ class NotificationService:
             raise ValueError("Webhook URL not configured")
 
         payload = {
-            "source": "backup-buddy",
+            "source": "dvbm",
             "event": event,
             "job_name": job_name,
             "message": message,

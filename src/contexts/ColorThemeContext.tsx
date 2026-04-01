@@ -41,7 +41,7 @@ const ColorThemeContext = createContext<ColorThemeContextValue>({
   setColorTheme: () => {},
 });
 
-const STORAGE_KEY = "backup-buddy-color-theme";
+const STORAGE_KEY = "dvbm-color-theme";
 
 /** Migrate legacy values stored before the rename */
 function migrateLegacy(raw: string | null): ThemeId | null {

@@ -12,9 +12,10 @@ RUN npm run build
 # ── Stage 2: Python backend ─────────────────────────────────────────────────
 FROM python:3.12-slim
 
-# Install rclone (optional, for rclone storage backend)
+# Install rclone (optional) and libsqlcipher-dev (required for sqlcipher3 at-rest encryption).
+# Note: libsqlcipher-dev is NOT purged — its .so is needed at runtime.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl unzip && \
+    apt-get install -y --no-install-recommends curl unzip libsqlcipher-dev && \
     curl -fsSL https://rclone.org/install.sh | bash || true && \
     apt-get purge -y curl unzip && \
     apt-get autoremove -y && \
@@ -24,10 +25,18 @@ WORKDIR /app
 
 # Python dependencies
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc && \
+    pip install --no-cache-dir -r requirements.txt && \
+    apt-get purge -y gcc && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy backend code
 COPY backend/app/ app/
+
+# Copy startup script (generates TLS cert if needed, then launches uvicorn)
+COPY backend/start.py .
 
 # Copy VERSION file for runtime version display
 COPY VERSION .
@@ -42,4 +51,4 @@ ENV BACKUP_TEMP_DIR=/backups
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "start.py"]

@@ -19,6 +19,27 @@ def list_storages(db: Session = Depends(get_db)):
     return db.query(StorageBackend).all()
 
 
+@router.get("/rclone/remotes")
+def list_rclone_remotes():
+    """List configured rclone remotes by parsing `rclone listremotes`."""
+    try:
+        result = subprocess.run(
+            [app_settings.RCLONE_BINARY, "listremotes", "--config", app_settings.RCLONE_CONFIG],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return {"remotes": [], "error": result.stderr.strip()}
+        # Each line is "remotename:", strip the colon
+        remotes = [line.rstrip(":").strip() for line in result.stdout.strip().splitlines() if line.strip()]
+        return {"remotes": remotes}
+    except FileNotFoundError:
+        return {"remotes": [], "error": "rclone binary not found"}
+    except Exception as exc:
+        return {"remotes": [], "error": str(exc)}
+
+
 @router.get("/{storage_id}", response_model=StorageBackendOut)
 def get_storage(storage_id: int, db: Session = Depends(get_db)):
     storage = db.query(StorageBackend).get(storage_id)
@@ -87,24 +108,3 @@ def test_storage_connection(storage_id: int, db: Session = Depends(get_db)):
     if not ok:
         return {"success": False, "message": msg}
     return {"success": True, "message": msg}
-
-
-@router.get("/rclone/remotes")
-def list_rclone_remotes():
-    """List configured rclone remotes by parsing `rclone listremotes`."""
-    try:
-        result = subprocess.run(
-            [app_settings.RCLONE_BINARY, "listremotes", "--config", app_settings.RCLONE_CONFIG],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return {"remotes": [], "error": result.stderr.strip()}
-        # Each line is "remotename:", strip the colon
-        remotes = [line.rstrip(":").strip() for line in result.stdout.strip().splitlines() if line.strip()]
-        return {"remotes": remotes}
-    except FileNotFoundError:
-        return {"remotes": [], "error": "rclone binary not found"}
-    except Exception as exc:
-        return {"remotes": [], "error": str(exc)}

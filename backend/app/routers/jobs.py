@@ -20,7 +20,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 
 def _enrich_job(job: BackupJob, db: Session) -> dict:
     """Add dynamic fields like matched containers, status, last/next run."""
-    label_key = job.label_key or "backup-buddy.job"
+    label_key = job.label_key or "dvbm.job"
     label_value = job.label_value or job.name
     containers = docker_service.find_containers_by_label(label_key, label_value)
     container_names = [c["name"] for c in containers]
@@ -173,7 +173,7 @@ def get_job_stats(job_id: int, db: Session = Depends(get_db)):
     )
 
     # 30-day success rate  (SQLite returns naive datetimes, so compare with naive UTC)
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
     recent_records = [r for r in all_records if r.started_at and r.started_at >= thirty_days_ago]
     total_recent = len(recent_records)
     success_recent = sum(1 for r in recent_records if r.status == "success")
@@ -188,7 +188,7 @@ def get_job_stats(job_id: int, db: Session = Depends(get_db)):
         avg_duration = round(sum(durations) / len(durations), 1)
 
     # Error count in last 24h
-    one_day_ago = datetime.utcnow() - timedelta(days=1)
+    one_day_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
     errors_24h = sum(
         1 for r in all_records
         if r.started_at and r.started_at >= one_day_ago and r.status in ("error", "warning")

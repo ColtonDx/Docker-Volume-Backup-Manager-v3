@@ -8,7 +8,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Identifier so we can find and replace our handler later
-_HANDLER_NAME = "backup_buddy_syslog"
+_HANDLER_NAME = "dvbm_syslog"
 
 # Map human-readable facility names → SysLogHandler constants
 _FACILITY_MAP: dict[str, int] = {
@@ -75,7 +75,7 @@ def configure_syslog(settings: dict[str, Any]) -> None:
 
         # RFC 5424-ish format with app name tag
         formatter = logging.Formatter(
-            fmt="backup-buddy: [%(levelname)s] %(name)s – %(message)s",
+            fmt="dvbm: [%(levelname)s] %(name)s – %(message)s",
         )
         handler.setFormatter(formatter)
 

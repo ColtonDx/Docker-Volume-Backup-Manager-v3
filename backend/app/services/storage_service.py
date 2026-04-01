@@ -140,7 +140,7 @@ class StorageService:
         path = config.get("path", "/backups")
         try:
             os.makedirs(path, exist_ok=True)
-            test_file = os.path.join(path, ".backup-buddy-test")
+            test_file = os.path.join(path, ".dvbm-test")
             Path(test_file).touch()
             os.remove(test_file)
             return True, f"Local path '{path}' is writable"

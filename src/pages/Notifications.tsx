@@ -184,7 +184,7 @@ export default function Notifications() {
                     </div>
                     <div className="space-y-2">
                       <Label>Topic</Label>
-                      <Input className="bg-background border-border font-mono text-sm" placeholder="backup-buddy-alerts" value={(form.config.topic as string) || ""} onChange={(e) => setConfigField("topic", e.target.value)} />
+                      <Input className="bg-background border-border font-mono text-sm" placeholder="dvbm-alerts" value={(form.config.topic as string) || ""} onChange={(e) => setConfigField("topic", e.target.value)} />
                     </div>
                     <div className="space-y-2">
                       <Label>Access Token (optional)</Label>
