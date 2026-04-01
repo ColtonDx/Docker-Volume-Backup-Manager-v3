@@ -77,6 +77,7 @@ def _enrich_job(
         "label_value": label_value,
         "label": f"{label_key}={label_value}",
         "enabled": job.enabled,
+        "timeout_seconds": job.timeout_seconds,
         "storage": job.storage,
         "schedule": job.schedule,
         "retention": job.retention,
@@ -137,6 +138,7 @@ def create_job(body: BackupJobCreate, db: Session = Depends(get_db)):
         schedule_id=body.schedule_id,
         retention_id=body.retention_id,
         enabled=body.enabled,
+        timeout_seconds=body.timeout_seconds,
     )
     db.add(job)
     db.commit()

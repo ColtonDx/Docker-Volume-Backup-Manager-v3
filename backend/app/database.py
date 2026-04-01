@@ -218,6 +218,15 @@ def _m001_add_label_columns(conn) -> None:
     conn.commit()
 
 
+def _m003_add_job_timeout(conn) -> None:
+    """Add per-job timeout_seconds column to backup_jobs."""
+    result = conn.execute(text("PRAGMA table_info(backup_jobs)"))
+    existing = {row[1] for row in result}
+    if "timeout_seconds" not in existing:
+        conn.execute(text("ALTER TABLE backup_jobs ADD COLUMN timeout_seconds INTEGER"))
+    conn.commit()
+
+
 def _m002_add_indexes(conn) -> None:
     """Add indexes on the most-queried columns of backup_records and log_entries."""
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_backup_records_job_id ON backup_records (job_id)"))
@@ -232,6 +241,7 @@ def _m002_add_indexes(conn) -> None:
 MIGRATIONS: list[tuple[int, str, object]] = [
     (1, "add label_key and label_value to backup_jobs", _m001_add_label_columns),
     (2, "add indexes on backup_records and log_entries", _m002_add_indexes),
+    (3, "add timeout_seconds to backup_jobs", _m003_add_job_timeout),
 ]
 
 

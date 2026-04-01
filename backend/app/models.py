@@ -81,6 +81,8 @@ class BackupJob(Base):
     schedule_id = Column(Integer, ForeignKey("schedules.id", ondelete="SET NULL"), nullable=True)
     retention_id = Column(Integer, ForeignKey("retention_policies.id"), nullable=True)
     enabled = Column(Boolean, default=True)
+    # Per-job timeout in seconds. NULL means use the JOB_TIMEOUT_SECONDS global default.
+    timeout_seconds = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 

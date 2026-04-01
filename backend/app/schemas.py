@@ -138,6 +138,7 @@ class BackupJobBase(BaseModel):
     schedule_id: int | None = None
     retention_id: int | None = None
     enabled: bool = True
+    timeout_seconds: int | None = None  # None = use JOB_TIMEOUT_SECONDS global default
 
 
 class BackupJobCreate(BackupJobBase):
@@ -152,6 +153,7 @@ class BackupJobUpdate(BaseModel):
     schedule_id: int | None = None
     retention_id: int | None = None
     enabled: bool | None = None
+    timeout_seconds: int | None = None
 
 
 class BackupJobOut(BaseModel):
@@ -161,6 +163,7 @@ class BackupJobOut(BaseModel):
     label_value: str = ""
     label: str = ""  # computed: "{label_key}={label_value}"
     enabled: bool
+    timeout_seconds: int | None = None
     storage: StorageBackendOut | None = None
     schedule: ScheduleOut | None = None
     retention: RetentionPolicyOut | None = None
