@@ -63,6 +63,11 @@ class SchedulerService:
                         id=f"backup-job-{bj.id}",
                         replace_existing=True,
                         name=f"backup-{bj.name}",
+                        # Prevent a second instance starting if the first is still running.
+                        max_instances=1,
+                        # If a trigger was missed while the job was running, run it
+                        # once when it's free rather than queuing up every missed fire.
+                        coalesce=True,
                     )
                     logger.info(
                         "Scheduled job '%s' (id=%d) with cron '%s'",

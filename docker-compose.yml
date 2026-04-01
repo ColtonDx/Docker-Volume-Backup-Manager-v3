@@ -33,6 +33,13 @@ services:
       # - RCLONE_CONFIG=/root/.config/rclone/rclone.conf
       # - RCLONE_BINARY=/usr/bin/rclone
 
+      # ── Backup concurrency ────────────────────────────────────────────────
+      # Maximum number of backup/restore jobs that run simultaneously.
+      # Default is 1 (sequential). Jobs that would exceed this limit wait in a
+      # thread queue until a slot is free. Increase only if all jobs target
+      # completely separate containers with no shared volumes.
+      # - MAX_CONCURRENT_BACKUPS=1
+
       # ── Database at-rest encryption (SQLCipher / AES-256) ─────────────────
       # When set, the SQLite database is encrypted on disk.
       # On first start with this key, an existing plaintext database is

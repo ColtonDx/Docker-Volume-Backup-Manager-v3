@@ -30,6 +30,13 @@ logger = logging.getLogger(__name__)
 class BackupService:
     """Manages backup and restore operations."""
 
+    def __init__(self) -> None:
+        from app.config import settings
+        # Semaphore limits how many backup/restore threads run simultaneously.
+        # Default is 1 (sequential) to prevent concurrent jobs from stopping
+        # the same containers or corrupting shared volumes.
+        self._semaphore = threading.Semaphore(settings.MAX_CONCURRENT_BACKUPS)
+
     def run_backup(self, job_id: int) -> None:
         """Execute a backup for the given job. Runs in a background thread."""
         thread = threading.Thread(target=self._do_backup, args=(job_id,), daemon=True)
@@ -45,6 +52,10 @@ class BackupService:
     # ------------------------------------------------------------------
 
     def _do_backup(self, job_id: int) -> None:
+        with self._semaphore:
+            self._run_backup(job_id)
+
+    def _run_backup(self, job_id: int) -> None:
         from app.database import SessionLocal
         from app.models import BackupJob, BackupRecord, LogEntry
         from app.services.docker_service import docker_service
@@ -222,6 +233,10 @@ class BackupService:
     # ------------------------------------------------------------------
 
     def _do_restore(self, backup_id: int) -> None:
+        with self._semaphore:
+            self._run_restore(backup_id)
+
+    def _run_restore(self, backup_id: int) -> None:
         from app.database import SessionLocal
         from app.models import BackupRecord, LogEntry
         from app.services.docker_service import docker_service

@@ -50,6 +50,11 @@ class Settings:
     # Timezone
     TIMEZONE: str = os.getenv("TZ", "UTC")
 
+    # Maximum number of backup jobs that may run at the same time.
+    # 1 (default) means jobs run sequentially — safest when jobs share containers.
+    # Increase only if all jobs target completely separate containers.
+    MAX_CONCURRENT_BACKUPS: int = int(os.getenv("MAX_CONCURRENT_BACKUPS", "1"))
+
     # Allowed hosts – comma-separated Host header values to accept.
     # Use "*" (default) to allow all. Restrict in production, e.g.:
     #   ALLOWED_HOSTS=myhost.example.com,localhost
