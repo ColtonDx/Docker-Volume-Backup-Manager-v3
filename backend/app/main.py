@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import settings
 from app.database import init_db
@@ -101,14 +102,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS – allow frontend dev server
+# CORS – origins from ALLOWED_ORIGINS env var (default: "*" for dev)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Trusted hosts – added after CORS so it runs first (outermost middleware layer).
+# Requests whose Host header is not in the allowlist are rejected with 400
+# before reaching CORS or any route handler.
+# Only active when ALLOWED_HOSTS is set to something other than "*".
+if settings.allowed_hosts_list != ["*"]:
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=settings.allowed_hosts_list,
+    )
 
 # ---- API routers ---------------------------------------------------------
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])

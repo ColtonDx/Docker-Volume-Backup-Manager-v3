@@ -8,7 +8,7 @@ services:
     volumes:
       # Required: Docker socket so we can manage containers
       - /var/run/docker.sock:/var/run/docker.sock
-      # Persistent data (SQLite database)
+      # Persistent data (SQLite database + auto-generated TLS certs)
       - data:/data
       # Temp directory for building archives before upload
       - temp:/backups
@@ -19,15 +19,49 @@ services:
     environment:
       # REQUIRED: Set a password for the web UI
       - BACKUP_BUDDY_PASSWORD=changeme
+
       # Optional: custom instance name shown in the sidebar
       # - APP_NAME=Docker Volume Backup Manager
-      # Optional: custom JWT secret (auto-generated if not set)
+
+      # Optional: custom JWT secret (strongly recommended in production)
       # - JWT_SECRET=my-super-secret-key
+
       # Optional: Docker label key to match jobs to containers
       # - DOCKER_LABEL_KEY=backup-buddy.job
+
       # Optional: rclone settings
-      # - RCLONE_CONFIG_PATH=/root/.config/rclone/rclone.conf
+      # - RCLONE_CONFIG=/root/.config/rclone/rclone.conf
       # - RCLONE_BINARY=/usr/bin/rclone
+
+      # ── Database at-rest encryption (SQLCipher / AES-256) ─────────────────
+      # When set, the SQLite database is encrypted on disk.
+      # On first start with this key, an existing plaintext database is
+      # automatically migrated (backup saved as backup_buddy.db.plaintext.bak).
+      # WARNING: if you lose or change this key the database becomes unreadable.
+      # - DB_ENCRYPTION_KEY=replace-with-a-strong-random-passphrase
+
+      # ── Allowed hosts / CORS ──────────────────────────────────────────────
+      # Restrict which Host header values are accepted (default: any).
+      # Include every hostname/IP used to reach this container, e.g.:
+      #   ALLOWED_HOSTS=myhost.example.com,localhost
+      # - ALLOWED_HOSTS=*
+      #
+      # Restrict CORS origins (default: any).
+      #   ALLOWED_ORIGINS=https://myhost.example.com
+      # - ALLOWED_ORIGINS=*
+
+      # ── HTTPS / TLS ───────────────────────────────────────────────────────
+      # Enabled by default. A self-signed cert is generated on first start
+      # and stored in /data/certs (persisted in the data volume).
+      # Access the UI at https://localhost:8000 and accept the cert warning,
+      # or import /data/certs/cert.pem into your OS/browser trust store.
+      #
+      # Disable TLS (plain HTTP):
+      # - SSL_ENABLED=false
+      #
+      # Use a custom cert (e.g. from Let's Encrypt via a bind-mount):
+      # - SSL_CERT_FILE=/data/certs/fullchain.pem
+      # - SSL_KEY_FILE=/data/certs/privkey.pem
 
 volumes:
   data:

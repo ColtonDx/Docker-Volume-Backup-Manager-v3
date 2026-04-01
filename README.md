@@ -1,73 +1,122 @@
-# Welcome to your Lovable project
- 
-## Project info
+# Docker Volume Backup Manager v3
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+A self-hosted web application for managing automated Docker container volume backups. Configure scheduled backups, choose where they're stored, set retention policies, and get notified — all from a browser-based UI running inside a single Docker container.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## What it does
 
-**Use Lovable**
+- **Backs up Docker volumes** by matching containers via a Docker label, stopping them, archiving their volumes into a `.tar.gz`, uploading the archive to your chosen storage, then restarting the containers automatically.
+- **Schedules backups** using standard cron expressions.
+- **Supports multiple storage backends**: local filesystem, Amazon S3 (or any S3-compatible service), FTP/SFTP, and rclone (supporting 70+ cloud providers).
+- **Applies retention policies**: automatically delete old backups by age, minimum/maximum count, or a combination.
+- **Sends notifications** on backup success, warning, or failure via Email, Slack, Discord, Gotify, ntfy, or any generic webhook.
+- **Restores from any recorded backup** through the UI.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## Quick start
 
-**Use your preferred IDE**
+```bash
+# 1. Edit the required environment variable in docker-compose.yml
+#    Set BACKUP_BUDDY_PASSWORD to something other than "changeme"
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+# 2. Start the container
+docker compose up -d
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+# 3. Open the UI
+#    https://localhost:8000
+#    Accept the self-signed certificate warning on first visit,
+#    or import /data/certs/cert.pem into your OS/browser trust store.
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Labelling containers for backup
 
-**Use GitHub Codespaces**
+The manager matches containers to backup jobs using a Docker label. Add the label to any container you want backed up:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```yaml
+# In your application's docker-compose.yml (not this one)
+services:
+  myapp:
+    image: myapp:latest
+    labels:
+      - "backup-buddy.job=myapp"   # value must match the Job Name set in the UI
+```
 
-## What technologies are used for this project?
+The label key (`backup-buddy.job`) can be changed via the `DOCKER_LABEL_KEY` environment variable.
 
-This project is built with:
+---
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Environment variables
 
-## How can I deploy this project?
+| Variable | Default | Description |
+|---|---|---|
+| `BACKUP_BUDDY_PASSWORD` | `changeme` | Web UI login password. |
+| `JWT_SECRET` | *(insecure default)* | Signs session tokens. Set a long random string in production. |
+| `DB_ENCRYPTION_KEY` | *(unset)* | Enables SQLCipher AES-256 encryption for the database at rest. **Store this key safely — losing it makes the database permanently unreadable.** |
+| `ALLOWED_HOSTS` | `*` | Comma-separated `Host` header allowlist (e.g. `myhost.local,localhost`). Requests from other hosts are rejected with 400. |
+| `ALLOWED_ORIGINS` | `*` | Comma-separated CORS origin allowlist (e.g. `https://myhost.local`). |
+| `SSL_ENABLED` | `true` | Serves the app over HTTPS. A self-signed cert is auto-generated on first start in `/data/certs/`. |
+| `SSL_CERT_FILE` | *(auto)* | Path to a custom TLS certificate (e.g. from Let's Encrypt). |
+| `SSL_KEY_FILE` | *(auto)* | Path to the corresponding private key. |
+| `DOCKER_LABEL_KEY` | `backup-buddy.job` | Docker label key used to match containers to jobs. |
+| `DATA_DIR` | `/data` | Directory for the SQLite database (and auto-generated TLS certs). |
+| `BACKUP_TEMP_DIR` | `/backups` | Staging directory for building archives before upload. |
+| `TZ` | `UTC` | Timezone used when evaluating cron schedules. |
+| `APP_NAME` | `Docker Volume Backup Manager` | Display name shown in the sidebar. |
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+---
 
-## Can I connect a custom domain to my Lovable project?
+## Using your own TLS certificate
 
-Yes, you can!
+Mount your certificate files and point the app at them:
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+```yaml
+volumes:
+  - /etc/letsencrypt/live/myhost.local:/certs:ro
+environment:
+  - SSL_CERT_FILE=/certs/fullchain.pem
+  - SSL_KEY_FILE=/certs/privkey.pem
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+---
+
+## Storage backends
+
+| Backend | Requirements |
+|---|---|
+| **Local filesystem** | A directory path inside the container. Bind-mount a host directory to make it persistent. |
+| **Amazon S3** | Bucket name, region, access key ID, and secret. Works with any S3-compatible service (MinIO, Backblaze B2, Cloudflare R2, etc.). |
+| **FTP / SFTP** | Host, port, username, and password (or key for SFTP). |
+| **rclone** | A configured rclone remote. Paste your `rclone.conf` into Settings → rclone Configuration, or mount the config file at the default path. |
+
+---
+
+## Data persistence
+
+The `data` Docker volume holds:
+- `backup_buddy.db` — the SQLite database (all jobs, schedules, records, settings)
+- `certs/` — auto-generated TLS certificate and private key
+
+The `temp` volume is a staging area used while building archives. It does not need to survive container restarts.
+
+---
+
+## Security notes
+
+- **HTTPS is on by default.** The self-signed cert is stored in the persistent `data` volume and reused across restarts. Import `cert.pem` into your browser or OS trust store to eliminate the warning.
+- **Set `DB_ENCRYPTION_KEY`** to encrypt the SQLite database on disk using AES-256 (SQLCipher). An existing plaintext database is automatically migrated on first start with the key set; a backup is kept at `backup_buddy.db.plaintext.bak`.
+- **Set `ALLOWED_HOSTS`** if the app is not behind a reverse proxy, to prevent host header injection.
+- **Change `JWT_SECRET`** from the default. It is used to sign session tokens — anyone who knows the default can forge a valid session.
+
+---
+
+## Built with
+
+- **Backend:** Python 3.12, FastAPI, SQLAlchemy, APScheduler, SQLCipher
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, TanStack Query
+- **Database:** SQLite (optional AES-256 encryption via SQLCipher)
+
+> This project was built with assistance from AI tools including [Claude Code](https://claude.ai/code) by Anthropic.
