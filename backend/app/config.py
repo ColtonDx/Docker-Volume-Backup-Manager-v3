@@ -20,7 +20,7 @@ class Settings:
     APP_VERSION: str = _read_version()
 
     # Auth
-    AUTH_PASSWORD: str = os.getenv("BACKUP_BUDDY_PASSWORD", "admin")
+    AUTH_PASSWORD: str = os.getenv("APP_PASSWORD", "admin")
     JWT_SECRET: str = os.getenv("JWT_SECRET", "change-me-in-production-please")
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = int(os.getenv("JWT_EXPIRE_HOURS", "24"))
@@ -36,10 +36,10 @@ class Settings:
 
     # Docker
     DOCKER_SOCKET: str = os.getenv("DOCKER_SOCKET", "unix:///var/run/docker.sock")
-    DOCKER_LABEL_KEY: str = os.getenv("DOCKER_LABEL_KEY", "backup-buddy.job")
+    DOCKER_LABEL_KEY: str = os.getenv("DOCKER_LABEL_KEY", "dvbm.job")
 
     # Backup
-    BACKUP_TEMP_DIR: Path = Path(os.getenv("BACKUP_TEMP_DIR", "/tmp/backup-buddy"))
+    BACKUP_TEMP_DIR: Path = Path(os.getenv("BACKUP_TEMP_DIR", "/tmp/dvbm"))
     DEFAULT_COMPRESSION: str = os.getenv("DEFAULT_COMPRESSION", "gzip")
 
     # Rclone
@@ -74,7 +74,7 @@ class Settings:
         if self.DB_PATH:
             return f"sqlite:///{self.DB_PATH}"
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        return f"sqlite:///{self.DATA_DIR / 'backup_buddy.db'}"
+        return f"sqlite:///{self.DATA_DIR / 'dvbm.db'}"
 
     @property
     def db_file_path(self) -> Path:

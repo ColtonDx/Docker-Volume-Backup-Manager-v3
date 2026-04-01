@@ -45,7 +45,7 @@ def _generate_self_signed_cert(cert_path: Path, key_path: Path) -> None:
 
     hostname = socket.gethostname()
     subject = issuer = x509.Name(
-        [x509.NameAttribute(NameOID.COMMON_NAME, "backup-buddy")]
+        [x509.NameAttribute(NameOID.COMMON_NAME, "dvbm")]
     )
 
     san_entries: list = [

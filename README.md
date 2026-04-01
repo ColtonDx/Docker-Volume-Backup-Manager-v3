@@ -19,7 +19,7 @@ A self-hosted web application for managing automated Docker container volume bac
 
 ```bash
 # 1. Edit the required environment variable in docker-compose.yml
-#    Set BACKUP_BUDDY_PASSWORD to something other than "changeme"
+#    Set APP_PASSWORD to something other than "changeme"
 
 # 2. Start the container
 docker compose up -d
@@ -42,10 +42,10 @@ services:
   myapp:
     image: myapp:latest
     labels:
-      - "backup-buddy.job=myapp"   # value must match the Job Name set in the UI
+      - "dvbm.job=myapp"   # value must match the Job Name set in the UI
 ```
 
-The label key (`backup-buddy.job`) can be changed via the `DOCKER_LABEL_KEY` environment variable.
+The label key (`dvbm.job`) can be changed via the `DOCKER_LABEL_KEY` environment variable.
 
 ---
 
@@ -53,7 +53,7 @@ The label key (`backup-buddy.job`) can be changed via the `DOCKER_LABEL_KEY` env
 
 | Variable | Default | Description |
 |---|---|---|
-| `BACKUP_BUDDY_PASSWORD` | `changeme` | Web UI login password. |
+| `APP_PASSWORD` | `changeme` | Web UI login password. |
 | `JWT_SECRET` | *(insecure default)* | Signs session tokens. Set a long random string in production. |
 | `DB_ENCRYPTION_KEY` | *(unset)* | Enables SQLCipher AES-256 encryption for the database at rest. **Store this key safely — losing it makes the database permanently unreadable.** |
 | `ALLOWED_HOSTS` | `*` | Comma-separated `Host` header allowlist (e.g. `myhost.local,localhost`). Requests from other hosts are rejected with 400. |
@@ -61,7 +61,7 @@ The label key (`backup-buddy.job`) can be changed via the `DOCKER_LABEL_KEY` env
 | `SSL_ENABLED` | `true` | Serves the app over HTTPS. A self-signed cert is auto-generated on first start in `/data/certs/`. |
 | `SSL_CERT_FILE` | *(auto)* | Path to a custom TLS certificate (e.g. from Let's Encrypt). |
 | `SSL_KEY_FILE` | *(auto)* | Path to the corresponding private key. |
-| `DOCKER_LABEL_KEY` | `backup-buddy.job` | Docker label key used to match containers to jobs. |
+| `DOCKER_LABEL_KEY` | `dvbm.job` | Docker label key used to match containers to jobs. |
 | `DATA_DIR` | `/data` | Directory for the SQLite database (and auto-generated TLS certs). |
 | `BACKUP_TEMP_DIR` | `/backups` | Staging directory for building archives before upload. |
 | `TZ` | `UTC` | Timezone used when evaluating cron schedules. |
@@ -97,7 +97,7 @@ environment:
 ## Data persistence
 
 The `data` Docker volume holds:
-- `backup_buddy.db` — the SQLite database (all jobs, schedules, records, settings)
+- `dvbm.db` — the SQLite database (all jobs, schedules, records, settings)
 - `certs/` — auto-generated TLS certificate and private key
 
 The `temp` volume is a staging area used while building archives. It does not need to survive container restarts.
@@ -107,7 +107,7 @@ The `temp` volume is a staging area used while building archives. It does not ne
 ## Security notes
 
 - **HTTPS is on by default.** The self-signed cert is stored in the persistent `data` volume and reused across restarts. Import `cert.pem` into your browser or OS trust store to eliminate the warning.
-- **Set `DB_ENCRYPTION_KEY`** to encrypt the SQLite database on disk using AES-256 (SQLCipher). An existing plaintext database is automatically migrated on first start with the key set; a backup is kept at `backup_buddy.db.plaintext.bak`.
+- **Set `DB_ENCRYPTION_KEY`** to encrypt the SQLite database on disk using AES-256 (SQLCipher). An existing plaintext database is automatically migrated on first start with the key set; a backup is kept at `dvbm.db.plaintext.bak`.
 - **Set `ALLOWED_HOSTS`** if the app is not behind a reverse proxy, to prevent host header injection.
 - **Change `JWT_SECRET`** from the default. It is used to sign session tokens — anyone who knows the default can forge a valid session.
 

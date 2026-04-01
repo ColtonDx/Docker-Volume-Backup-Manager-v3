@@ -18,7 +18,7 @@ services:
       # - ~/.config/rclone:/root/.config/rclone:ro
     environment:
       # REQUIRED: Set a password for the web UI
-      - BACKUP_BUDDY_PASSWORD=changeme
+      - APP_PASSWORD=changeme
 
       # Optional: custom instance name shown in the sidebar
       # - APP_NAME=Docker Volume Backup Manager
@@ -27,7 +27,7 @@ services:
       # - JWT_SECRET=my-super-secret-key
 
       # Optional: Docker label key to match jobs to containers
-      # - DOCKER_LABEL_KEY=backup-buddy.job
+      # - DOCKER_LABEL_KEY=dvbm.job
 
       # Optional: rclone settings
       # - RCLONE_CONFIG=/root/.config/rclone/rclone.conf
@@ -36,7 +36,7 @@ services:
       # ── Database at-rest encryption (SQLCipher / AES-256) ─────────────────
       # When set, the SQLite database is encrypted on disk.
       # On first start with this key, an existing plaintext database is
-      # automatically migrated (backup saved as backup_buddy.db.plaintext.bak).
+      # automatically migrated (backup saved as dvbm.db.plaintext.bak).
       # WARNING: if you lose or change this key the database becomes unreadable.
       # - DB_ENCRYPTION_KEY=replace-with-a-strong-random-passphrase
 

@@ -16,7 +16,7 @@ export const REFRESH_OPTIONS: RefreshOption[] = [
   { value: 300, label: "5m" },
 ];
 
-const STORAGE_KEY = "backup-buddy-auto-refresh";
+const STORAGE_KEY = "dvbm-auto-refresh";
 
 interface AutoRefreshContextValue {
   interval: RefreshInterval;

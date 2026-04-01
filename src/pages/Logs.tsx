@@ -42,7 +42,7 @@ export default function Logs() {
             const blob = new Blob([text], { type: "text/plain" });
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
-            a.download = "backup-buddy-logs.txt";
+            a.download = "dvbm-logs.txt";
             a.click();
           }}>
             <Download className="h-4 w-4" />

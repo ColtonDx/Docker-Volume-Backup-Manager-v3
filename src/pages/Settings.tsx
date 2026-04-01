@@ -98,7 +98,7 @@ export default function Settings() {
       a.href = url;
       const disposition = res.headers.get("Content-Disposition") || "";
       const match = disposition.match(/filename="(.+)"/);
-      a.download = match ? match[1] : "backup_buddy_config.zip";
+      a.download = match ? match[1] : "dvbm_config.zip";
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -220,8 +220,8 @@ export default function Settings() {
             <Separator />
             <div className="space-y-2">
               <Label>Default Docker Label Key</Label>
-              <Input className="bg-background border-border font-mono" value={(form.default_label_key as string) || "backup-buddy.job"} onChange={(e) => set("default_label_key", e.target.value)} placeholder="backup-buddy.job" />
-              <p className="text-xs text-muted-foreground">New backup jobs will use this as the default label key (left side of the <code>=</code>). Containers with <code>{(form.default_label_key as string) || "backup-buddy.job"}=&lt;value&gt;</code> will be matched.</p>
+              <Input className="bg-background border-border font-mono" value={(form.default_label_key as string) || "dvbm.job"} onChange={(e) => set("default_label_key", e.target.value)} placeholder="dvbm.job" />
+              <p className="text-xs text-muted-foreground">New backup jobs will use this as the default label key (left side of the <code>=</code>). Containers with <code>{(form.default_label_key as string) || "dvbm.job"}=&lt;value&gt;</code> will be matched.</p>
             </div>
           </CardContent>
         </Card>

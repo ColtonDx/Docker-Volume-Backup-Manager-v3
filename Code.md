@@ -17,7 +17,7 @@ FastAPI (Python, Uvicorn)
   └── everything else → React SPA (index.html)
 
 FastAPI internally uses:
-  ├── SQLite database   (/data/backup_buddy.db)
+  ├── SQLite database   (/data/dvbm.db)
   ├── Docker socket     (/var/run/docker.sock)
   ├── APScheduler       (in-process cron runner)
   └── rclone binary     (/usr/bin/rclone, optional)
@@ -102,7 +102,7 @@ Uses SQLAlchemy 2 with a synchronous SQLite engine. Key decisions:
 
 The passphrase is not sent directly to SQLCipher; it's SHA-256 hashed first to produce a fixed 32-byte hex key (`PRAGMA key = "x'hexdigest'"`). This avoids SQLCipher version differences in KDF defaults.
 
-**Migration**: if an existing plaintext database is found when encrypted mode is first enabled, it is automatically migrated: the plaintext DB is read with Python's built-in `sqlite3`, the SQL dump is replayed into a new SQLCipher database, and the original is replaced atomically. The plaintext file is kept as `backup_buddy.db.plaintext.bak`.
+**Migration**: if an existing plaintext database is found when encrypted mode is first enabled, it is automatically migrated: the plaintext DB is read with Python's built-in `sqlite3`, the SQL dump is replayed into a new SQLCipher database, and the original is replaced atomically. The plaintext file is kept as `dvbm.db.plaintext.bak`.
 
 ---
 

@@ -41,7 +41,7 @@ All frontend routes are served as SPA via a FastAPI catch-all. API endpoints are
 - **`main.py`** — FastAPI app init, middleware, SPA catch-all, lifespan hooks (starts APScheduler)
 - **`config.py`** — All settings; can be overridden via env vars or the settings page in the UI
 - **`models.py`** / **`schemas.py`** / **`database.py`** — SQLAlchemy ORM (SQLite), Pydantic schemas, migration-on-startup
-- **`auth.py`** — Single-user JWT auth; password set via `BACKUP_BUDDY_PASSWORD` env var
+- **`auth.py`** — Single-user JWT auth; password set via `APP_PASSWORD` env var
 
 #### Services (`backend/app/services/`)
 | Service | Role |
@@ -71,14 +71,14 @@ Schema migrations run automatically on backend startup via `database.py`.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BACKUP_BUDDY_PASSWORD` | `"admin"` | Web UI login password |
+| `APP_PASSWORD` | `"admin"` | Web UI login password |
 | `JWT_SECRET` | hardcoded default | JWT signing key |
-| `DOCKER_LABEL_KEY` | `"backup-buddy.job"` | Container label used to match backup jobs |
+| `DOCKER_LABEL_KEY` | `"dvbm.job"` | Container label used to match backup jobs |
 | `DATA_DIR` | `/data` | SQLite DB location |
-| `BACKUP_TEMP_DIR` | `/tmp/backup-buddy` | Staging dir for archives |
+| `BACKUP_TEMP_DIR` | `/tmp/dvbm` | Staging dir for archives |
 | `RCLONE_BINARY` | `/usr/bin/rclone` | rclone executable |
 | `TZ` | `UTC` | Timezone for cron schedules |
 
 ## Container Label Convention
 
-Containers are matched to backup jobs via a Docker label. The label key defaults to `backup-buddy.job` and is set in `config.py` / `DOCKER_LABEL_KEY`. The label value on the container should match the job name.
+Containers are matched to backup jobs via a Docker label. The label key defaults to `dvbm.job` and is set in `config.py` / `DOCKER_LABEL_KEY`. The label value on the container should match the job name.

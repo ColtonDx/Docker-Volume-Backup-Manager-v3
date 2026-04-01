@@ -59,7 +59,7 @@ export default function Login() {
             <p className="text-xs text-center text-muted-foreground">
               Default password: <code className="text-foreground">admin</code>
               <br />
-              <span className="text-xs">(set via BACKUP_BUDDY_PASSWORD env var)</span>
+              <span className="text-xs">(set via APP_PASSWORD env var)</span>
             </p>
           </form>
         </CardContent>

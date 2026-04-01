@@ -2,7 +2,7 @@
 
 Communicates with the Docker daemon via the Docker SDK to:
  - List / inspect containers
- - Find containers matching a backup-buddy label
+ - Find containers matching a dvbm label
  - Stop and restart containers
  - List volumes for containers
  - Export / import volume data via temporary helper containers
@@ -148,7 +148,7 @@ class DockerService:
 
         Spins up a temporary ``alpine`` container that mounts the volume
         read-only and streams its contents back as a tar archive via the
-        Docker ``get_archive`` API.  This works even when backup-buddy
+        Docker ``get_archive`` API.  This works even when dvbm
         itself is running inside a container (i.e. no host filesystem
         access).
 

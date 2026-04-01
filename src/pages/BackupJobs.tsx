@@ -46,7 +46,7 @@ export default function BackupJobs() {
   const { data: schedules = [] } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
   const { data: rotations = [] } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
   const { data: settingsData } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
-  const defaultLabelKey = (settingsData?.settings as Record<string, unknown> | undefined)?.default_label_key as string || "backup-buddy.job";
+  const defaultLabelKey = (settingsData?.settings as Record<string, unknown> | undefined)?.default_label_key as string || "dvbm.job";
 
   // Handle ?edit=<id> from JobDetail page
   useEffect(() => {

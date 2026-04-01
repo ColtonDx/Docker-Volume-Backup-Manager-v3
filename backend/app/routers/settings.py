@@ -30,7 +30,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 # Default settings values
 DEFAULTS: dict[str, Any] = {
     "timezone": "utc",
-    "default_label_key": "backup-buddy.job",
+    "default_label_key": "dvbm.job",
     "rclone_enabled": False,
     "rclone_binary": "/usr/bin/rclone",
     "rclone_config": "/root/.config/rclone/rclone.conf",
@@ -186,7 +186,7 @@ def export_config(db: Session = Depends(get_db)):
     buf.seek(0)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    filename = f"backup_buddy_config_{timestamp}.zip"
+    filename = f"dvbm_config_{timestamp}.zip"
 
     return StreamingResponse(
         buf,
@@ -321,7 +321,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
             row = db.query(BackupJob).get(item["id"])
             if row:
                 row.name = item["name"]
-                row.label_key = item.get("label_key", "backup-buddy.job")
+                row.label_key = item.get("label_key", "dvbm.job")
                 row.label_value = item.get("label_value", "")
                 row.storage_id = item["storage_id"]
                 row.schedule_id = item.get("schedule_id")
@@ -330,7 +330,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
             else:
                 db.add(BackupJob(
                     id=item["id"], name=item["name"],
-                    label_key=item.get("label_key", "backup-buddy.job"),
+                    label_key=item.get("label_key", "dvbm.job"),
                     label_value=item.get("label_value", ""),
                     storage_id=item["storage_id"],
                     schedule_id=item.get("schedule_id"),
