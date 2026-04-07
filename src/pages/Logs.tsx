@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Download, Filter, Search, RefreshCw, AlertTriangle, CheckCircle, Info, XCircle } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -25,10 +25,16 @@ export default function Logs() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const { data: logs = [], isLoading } = useQuery({
-    queryKey: ["logs", filter, search],
-    queryFn: () => fetchLogs({ level: filter !== "all" ? filter : undefined, search: search || undefined, limit: 200 }),
+    queryKey: ["logs", filter, debouncedSearch],
+    queryFn: () => fetchLogs({ level: filter !== "all" ? filter : undefined, search: debouncedSearch || undefined, limit: 200 }),
   });
 
   return (
