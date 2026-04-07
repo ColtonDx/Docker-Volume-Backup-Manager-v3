@@ -18,7 +18,8 @@ class SchedulerService:
     """Manages the APScheduler instance that fires backup jobs on cron schedules."""
 
     def __init__(self) -> None:
-        self._scheduler = BackgroundScheduler(timezone="UTC")
+        from app.config import settings
+        self._scheduler = BackgroundScheduler(timezone=settings.TIMEZONE)
 
     def start(self) -> None:
         """Start the scheduler and sync jobs from the database."""
@@ -98,6 +99,7 @@ class SchedulerService:
         if len(parts) != 5:
             raise ValueError(f"Invalid cron expression (need 5 fields): {cron_expr}")
 
+        from app.config import settings
         minute, hour, day, month, day_of_week = parts
         return CronTrigger(
             minute=minute,
@@ -105,6 +107,7 @@ class SchedulerService:
             day=day,
             month=month,
             day_of_week=day_of_week,
+            timezone=settings.TIMEZONE,
         )
 
 

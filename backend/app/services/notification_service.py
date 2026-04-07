@@ -56,8 +56,9 @@ class NotificationService:
 
     def send_test(self, channel_type: str, config: dict[str, Any]) -> tuple[bool, str]:
         """Send a test notification. Returns (success, message)."""
+        from app.config import settings
         try:
-            self._send(channel_type, config, "Test Job", "info", "This is a test notification from Backup Buddy")
+            self._send(channel_type, config, "Test Job", "info", f"This is a test notification from {settings.APP_NAME}")
             return True, "Test notification sent successfully"
         except Exception as exc:
             return False, str(exc)
