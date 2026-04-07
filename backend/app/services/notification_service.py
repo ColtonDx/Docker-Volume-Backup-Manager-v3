@@ -92,6 +92,7 @@ class NotificationService:
 
     @staticmethod
     def _send_email(config: dict, job_name: str, event: str, message: str) -> None:
+        from app.config import settings
         host = config.get("smtp_host", "localhost")
         port = config.get("smtp_port", 587)
         username = config.get("smtp_username", "")
@@ -103,7 +104,6 @@ class NotificationService:
         if isinstance(to_addrs, str):
             to_addrs = [to_addrs]
 
-        from app.config import settings
         subject = f"[{settings.APP_NAME}] {event.upper()}: {job_name}"
         body = f"Job: {job_name}\nEvent: {event}\n\n{message}"
 
@@ -127,6 +127,7 @@ class NotificationService:
 
     @staticmethod
     def _send_slack(config: dict, job_name: str, event: str, message: str) -> None:
+        from app.config import settings
         webhook_url = config.get("webhook_url", "")
         if not webhook_url:
             raise ValueError("Slack webhook URL not configured")
@@ -134,7 +135,7 @@ class NotificationService:
         emoji = {"success": ":white_check_mark:", "failure": ":x:", "warning": ":warning:"}.get(event, ":information_source:")
 
         payload = {
-            "text": f"{emoji} *Backup Buddy – {event.upper()}*\n*Job:* {job_name}\n{message}",
+            "text": f"{emoji} *{settings.APP_NAME} \u2013 {event.upper()}*\n*Job:* {job_name}\n{message}",
         }
 
         channel = config.get("channel")
@@ -151,6 +152,7 @@ class NotificationService:
 
     @staticmethod
     def _send_discord(config: dict, job_name: str, event: str, message: str) -> None:
+        from app.config import settings
         webhook_url = config.get("webhook_url", "").strip()
         if not webhook_url:
             raise ValueError("Discord webhook URL not configured")
@@ -168,7 +170,7 @@ class NotificationService:
         payload = {
             "embeds": [
                 {
-                    "title": f"Backup Buddy \u2013 {event.upper()}"[:256],
+                    "title": f"{settings.APP_NAME} \u2013 {event.upper()}"[:256],
                     "description": message[:4096],
                     "color": color,
                     "fields": [
@@ -178,7 +180,7 @@ class NotificationService:
                     "timestamp": ts,
                 }
             ],
-            "username": config.get("username", "Backup Buddy")[:80],
+            "username": config.get("username", settings.APP_NAME)[:80],
         }
 
         avatar_url = config.get("avatar_url", "").strip()
@@ -233,6 +235,7 @@ class NotificationService:
 
     @staticmethod
     def _send_gotify(config: dict, job_name: str, event: str, message: str) -> None:
+        from app.config import settings
         server_url = config.get("server_url", "").rstrip("/")
         app_token = config.get("app_token", "")
         if not server_url or not app_token:
@@ -242,7 +245,7 @@ class NotificationService:
         priority = config.get("priority", priority_map.get(event, 4))
 
         payload = {
-            "title": f"Backup Buddy \u2013 {event.upper()}: {job_name}",
+            "title": f"{settings.APP_NAME} \u2013 {event.upper()}: {job_name}",
             "message": message,
             "priority": int(priority),
             "extras": {
@@ -265,6 +268,7 @@ class NotificationService:
 
     @staticmethod
     def _send_ntfy(config: dict, job_name: str, event: str, message: str) -> None:
+        from app.config import settings
         server_url = config.get("server_url", "https://ntfy.sh").rstrip("/")
         topic = config.get("topic", "")
         if not topic:
@@ -275,7 +279,7 @@ class NotificationService:
         tag_map = {"failure": "rotating_light,x", "warning": "warning", "success": "white_check_mark", "info": "information_source"}
 
         headers: dict[str, str] = {
-            "Title": f"Backup Buddy \u2013 {event.upper()}: {job_name}",
+            "Title": f"{settings.APP_NAME} \u2013 {event.upper()}: {job_name}",
             "Priority": config.get("priority", priority_map.get(event, "3")),
             "Tags": tag_map.get(event, "information_source"),
         }
