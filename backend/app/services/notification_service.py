@@ -103,7 +103,8 @@ class NotificationService:
         if isinstance(to_addrs, str):
             to_addrs = [to_addrs]
 
-        subject = f"[Backup Buddy] {event.upper()}: {job_name}"
+        from app.config import settings
+        subject = f"[{settings.APP_NAME}] {event.upper()}: {job_name}"
         body = f"Job: {job_name}\nEvent: {event}\n\n{message}"
 
         msg = MIMEText(body)
