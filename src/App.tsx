@@ -21,7 +21,16 @@ import Settings from "./pages/Settings";
 import JobDetail from "./pages/JobDetail";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Data stays fresh for 30 seconds — navigating between pages reuses the
+      // cache rather than re-fetching on every mount. The dashboard's own
+      // refetchInterval handles live updates independently of this setting.
+      staleTime: 30_000,
+    },
+  },
+});
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth();

@@ -50,6 +50,16 @@ class Settings:
     # Timezone
     TIMEZONE: str = os.getenv("TZ", "UTC")
 
+    # Maximum number of backup jobs that may run at the same time.
+    # 1 (default) means jobs run sequentially — safest when jobs share containers.
+    # Increase only if all jobs target completely separate containers.
+    MAX_CONCURRENT_BACKUPS: int = int(os.getenv("MAX_CONCURRENT_BACKUPS", "1"))
+
+    # Maximum time a single backup or restore job may run before it is forcibly
+    # marked as failed and the semaphore slot is released. Default: 2 hours.
+    # Set to 0 to disable the timeout (not recommended).
+    JOB_TIMEOUT_SECONDS: int = int(os.getenv("JOB_TIMEOUT_SECONDS", "7200"))
+
     # Allowed hosts – comma-separated Host header values to accept.
     # Use "*" (default) to allow all. Restrict in production, e.g.:
     #   ALLOWED_HOSTS=myhost.example.com,localhost

@@ -18,20 +18,41 @@ from app.services.scheduler_service import scheduler_service
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
-def _enrich_job(job: BackupJob, db: Session) -> dict:
-    """Add dynamic fields like matched containers, status, last/next run."""
+def _enrich_job(
+    job: BackupJob,
+    db: Session,
+    all_containers: list[dict] | None = None,
+    last_records: dict[int, BackupRecord] | None = None,
+) -> dict:
+    """Add dynamic fields like matched containers, status, last/next run.
+
+    When called from list_jobs, all_containers and last_records are pre-fetched
+    in bulk (one Docker call + one DB query for the whole list). When called for
+    a single job these are None and the individual lookups are performed instead.
+    """
     label_key = job.label_key or "dvbm.job"
     label_value = job.label_value or job.name
-    containers = docker_service.find_containers_by_label(label_key, label_value)
-    container_names = [c["name"] for c in containers]
+
+    if all_containers is not None:
+        # Match from the pre-fetched list — no Docker call needed
+        container_names = [
+            c["name"] for c in all_containers
+            if c.get("labels", {}).get(label_key) == label_value
+        ]
+    else:
+        containers = docker_service.find_containers_by_label(label_key, label_value)
+        container_names = [c["name"] for c in containers]
 
     # Determine status from most recent backup record
-    last_record: BackupRecord | None = (
-        db.query(BackupRecord)
-        .filter(BackupRecord.job_id == job.id)
-        .order_by(BackupRecord.started_at.desc())
-        .first()
-    )
+    if last_records is not None:
+        last_record: BackupRecord | None = last_records.get(job.id)
+    else:
+        last_record = (
+            db.query(BackupRecord)
+            .filter(BackupRecord.job_id == job.id)
+            .order_by(BackupRecord.started_at.desc())
+            .first()
+        )
     if last_record:
         if last_record.status == "running":
             status = "running"
@@ -56,6 +77,7 @@ def _enrich_job(job: BackupJob, db: Session) -> dict:
         "label_value": label_value,
         "label": f"{label_key}={label_value}",
         "enabled": job.enabled,
+        "timeout_seconds": job.timeout_seconds,
         "storage": job.storage,
         "schedule": job.schedule,
         "retention": job.retention,
@@ -71,7 +93,31 @@ def _enrich_job(job: BackupJob, db: Session) -> dict:
 @router.get("", response_model=List[BackupJobOut])
 def list_jobs(db: Session = Depends(get_db)):
     jobs = db.query(BackupJob).all()
-    return [_enrich_job(j, db) for j in jobs]
+    if not jobs:
+        return []
+
+    # One Docker call for all containers (instead of one per job)
+    all_containers = docker_service.list_containers(all=True)
+
+    # One DB query for the most recent backup record per job (instead of one per job)
+    subq = (
+        db.query(
+            BackupRecord.job_id,
+            func.max(BackupRecord.started_at).label("max_started"),
+        )
+        .group_by(BackupRecord.job_id)
+        .subquery()
+    )
+    last_records: dict[int, BackupRecord] = {
+        r.job_id: r
+        for r in db.query(BackupRecord).join(
+            subq,
+            (BackupRecord.job_id == subq.c.job_id)
+            & (BackupRecord.started_at == subq.c.max_started),
+        ).all()
+    }
+
+    return [_enrich_job(j, db, all_containers, last_records) for j in jobs]
 
 
 @router.get("/{job_id}", response_model=BackupJobOut)
@@ -92,6 +138,7 @@ def create_job(body: BackupJobCreate, db: Session = Depends(get_db)):
         schedule_id=body.schedule_id,
         retention_id=body.retention_id,
         enabled=body.enabled,
+        timeout_seconds=body.timeout_seconds,
     )
     db.add(job)
     db.commit()

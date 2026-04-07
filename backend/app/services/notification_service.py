@@ -56,8 +56,9 @@ class NotificationService:
 
     def send_test(self, channel_type: str, config: dict[str, Any]) -> tuple[bool, str]:
         """Send a test notification. Returns (success, message)."""
+        from app.config import settings
         try:
-            self._send(channel_type, config, "Test Job", "info", "This is a test notification from Backup Buddy")
+            self._send(channel_type, config, "Test Job", "info", f"This is a test notification from {settings.APP_NAME}")
             return True, "Test notification sent successfully"
         except Exception as exc:
             return False, str(exc)
@@ -91,6 +92,7 @@ class NotificationService:
 
     @staticmethod
     def _send_email(config: dict, job_name: str, event: str, message: str) -> None:
+        from app.config import settings
         host = config.get("smtp_host", "localhost")
         port = config.get("smtp_port", 587)
         username = config.get("smtp_username", "")
@@ -102,7 +104,7 @@ class NotificationService:
         if isinstance(to_addrs, str):
             to_addrs = [to_addrs]
 
-        subject = f"[Backup Buddy] {event.upper()}: {job_name}"
+        subject = f"[{settings.APP_NAME}] {event.upper()}: {job_name}"
         body = f"Job: {job_name}\nEvent: {event}\n\n{message}"
 
         msg = MIMEText(body)
@@ -125,6 +127,7 @@ class NotificationService:
 
     @staticmethod
     def _send_slack(config: dict, job_name: str, event: str, message: str) -> None:
+        from app.config import settings
         webhook_url = config.get("webhook_url", "")
         if not webhook_url:
             raise ValueError("Slack webhook URL not configured")
@@ -132,7 +135,7 @@ class NotificationService:
         emoji = {"success": ":white_check_mark:", "failure": ":x:", "warning": ":warning:"}.get(event, ":information_source:")
 
         payload = {
-            "text": f"{emoji} *Backup Buddy – {event.upper()}*\n*Job:* {job_name}\n{message}",
+            "text": f"{emoji} *{settings.APP_NAME} \u2013 {event.upper()}*\n*Job:* {job_name}\n{message}",
         }
 
         channel = config.get("channel")
@@ -149,35 +152,52 @@ class NotificationService:
 
     @staticmethod
     def _send_discord(config: dict, job_name: str, event: str, message: str) -> None:
-        webhook_url = config.get("webhook_url", "")
+        from app.config import settings
+        webhook_url = config.get("webhook_url", "").strip()
         if not webhook_url:
             raise ValueError("Discord webhook URL not configured")
 
         color_map = {"success": 0x22C55E, "failure": 0xEF4444, "warning": 0xF59E0B}
         color = color_map.get(event, 0x3B82F6)
 
+        # Discord timestamps must be ISO 8601 with explicit UTC offset.
+        # Truncate microseconds — Discord rejects timestamps with sub-second precision.
+        ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+        # Truncate fields to Discord's documented limits to avoid 400 errors:
+        #   embed title: 256 chars, description: 4096 chars, field value: 1024 chars
+        #   username: 80 chars
         payload = {
             "embeds": [
                 {
-                    "title": f"Backup Buddy \u2013 {event.upper()}",
-                    "description": message,
+                    "title": f"{settings.APP_NAME} \u2013 {event.upper()}"[:256],
+                    "description": message[:4096],
                     "color": color,
                     "fields": [
-                        {"name": "Job", "value": job_name, "inline": True},
-                        {"name": "Event", "value": event, "inline": True},
+                        {"name": "Job", "value": job_name[:1024], "inline": True},
+                        {"name": "Event", "value": event[:1024], "inline": True},
                     ],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": ts,
                 }
             ],
-            "username": config.get("username", "Backup Buddy"),
+            "username": config.get("username", settings.APP_NAME)[:80],
         }
 
-        avatar_url = config.get("avatar_url")
+        avatar_url = config.get("avatar_url", "").strip()
         if avatar_url:
             payload["avatar_url"] = avatar_url
 
         resp = httpx.post(webhook_url, json=payload, timeout=10)
-        resp.raise_for_status()
+
+        # Discord returns 204 No Content on success; any non-2xx is a failure.
+        if not resp.is_success:
+            # Surface the response body so the real reason is visible in logs.
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise ValueError(f"Discord webhook returned {resp.status_code}: {detail}")
+
         logger.info("Discord notification sent")
 
     # ------------------------------------------------------------------
@@ -215,6 +235,7 @@ class NotificationService:
 
     @staticmethod
     def _send_gotify(config: dict, job_name: str, event: str, message: str) -> None:
+        from app.config import settings
         server_url = config.get("server_url", "").rstrip("/")
         app_token = config.get("app_token", "")
         if not server_url or not app_token:
@@ -224,7 +245,7 @@ class NotificationService:
         priority = config.get("priority", priority_map.get(event, 4))
 
         payload = {
-            "title": f"Backup Buddy \u2013 {event.upper()}: {job_name}",
+            "title": f"{settings.APP_NAME} \u2013 {event.upper()}: {job_name}",
             "message": message,
             "priority": int(priority),
             "extras": {
@@ -247,6 +268,7 @@ class NotificationService:
 
     @staticmethod
     def _send_ntfy(config: dict, job_name: str, event: str, message: str) -> None:
+        from app.config import settings
         server_url = config.get("server_url", "https://ntfy.sh").rstrip("/")
         topic = config.get("topic", "")
         if not topic:
@@ -257,7 +279,7 @@ class NotificationService:
         tag_map = {"failure": "rotating_light,x", "warning": "warning", "success": "white_check_mark", "info": "information_source"}
 
         headers: dict[str, str] = {
-            "Title": f"Backup Buddy \u2013 {event.upper()}: {job_name}",
+            "Title": f"{settings.APP_NAME} \u2013 {event.upper()}: {job_name}",
             "Priority": config.get("priority", priority_map.get(event, "3")),
             "Tags": tag_map.get(event, "information_source"),
         }

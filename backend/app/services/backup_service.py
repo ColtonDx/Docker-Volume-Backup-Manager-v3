@@ -30,6 +30,13 @@ logger = logging.getLogger(__name__)
 class BackupService:
     """Manages backup and restore operations."""
 
+    def __init__(self) -> None:
+        from app.config import settings
+        # Semaphore limits how many backup/restore threads run simultaneously.
+        # Default is 1 (sequential) to prevent concurrent jobs from stopping
+        # the same containers or corrupting shared volumes.
+        self._semaphore = threading.Semaphore(settings.MAX_CONCURRENT_BACKUPS)
+
     def run_backup(self, job_id: int) -> None:
         """Execute a backup for the given job. Runs in a background thread."""
         thread = threading.Thread(target=self._do_backup, args=(job_id,), daemon=True)
@@ -45,6 +52,89 @@ class BackupService:
     # ------------------------------------------------------------------
 
     def _do_backup(self, job_id: int) -> None:
+        with self._semaphore:
+            self._run_with_timeout(job_id, kind="backup")
+
+    def _do_restore(self, backup_id: int) -> None:
+        with self._semaphore:
+            self._run_with_timeout(backup_id, kind="restore")
+
+    def _run_with_timeout(self, entity_id: int, kind: str) -> None:
+        """Run a backup or restore in a child thread, enforcing a per-job timeout.
+
+        Resolves timeout from (in priority order):
+          1. The job's own timeout_seconds field (if set)
+          2. The JOB_TIMEOUT_SECONDS global default
+          3. No timeout if both are 0
+        """
+        from app.config import settings
+        from app.database import SessionLocal
+        from app.models import BackupJob, BackupRecord
+
+        # Resolve the timeout for this specific job
+        timeout: int | None = None
+        if kind == "backup":
+            db = SessionLocal()
+            try:
+                job = db.query(BackupJob).get(entity_id)
+                job_timeout = job.timeout_seconds if job else None
+                job_name = job.name if job else str(entity_id)
+            finally:
+                db.close()
+
+            raw = job_timeout if job_timeout is not None else settings.JOB_TIMEOUT_SECONDS
+            timeout = raw if raw > 0 else None
+        else:
+            # Restore: use global default only (no per-record timeout field)
+            raw = settings.JOB_TIMEOUT_SECONDS
+            timeout = raw if raw > 0 else None
+            job_name = f"restore-{entity_id}"
+
+        target = self._run_backup if kind == "backup" else self._run_restore
+        worker = threading.Thread(target=target, args=(entity_id,), daemon=True)
+        worker.start()
+        worker.join(timeout)
+
+        if worker.is_alive():
+            # The worker thread is still running — it has exceeded its timeout.
+            # Python cannot forcibly kill a thread, so we mark the record as
+            # timed out in the DB and release the semaphore. The thread will
+            # eventually finish or die with the process.
+            logger.error(
+                "%s job %s timed out after %ds and will be marked as error",
+                kind, job_name, timeout,
+            )
+            self._mark_timed_out(entity_id, kind, timeout)
+
+    def _mark_timed_out(self, entity_id: int, kind: str, timeout: int) -> None:
+        """Write a timeout error record to the database."""
+        from app.database import SessionLocal
+        from app.models import BackupRecord
+        from app.services.notification_service import notification_service
+
+        db = SessionLocal()
+        try:
+            if kind == "backup":
+                # Find the running record for this job and mark it failed
+                record = (
+                    db.query(BackupRecord)
+                    .filter(BackupRecord.job_id == entity_id, BackupRecord.status == "running")
+                    .order_by(BackupRecord.started_at.desc())
+                    .first()
+                )
+                if record:
+                    record.status = "error"
+                    record.error_message = f"Job timed out after {timeout}s"
+                    record.completed_at = datetime.now(timezone.utc)
+                    db.commit()
+                    job_name = record.job.name if record.job else str(entity_id)
+                    notification_service.notify_event("failure", job_name, f"Backup timed out after {timeout}s")
+        except Exception as exc:
+            logger.error("Failed to mark timed-out job: %s", exc)
+        finally:
+            db.close()
+
+    def _run_backup(self, job_id: int) -> None:
         from app.database import SessionLocal
         from app.models import BackupJob, BackupRecord, LogEntry
         from app.services.docker_service import docker_service
@@ -221,7 +311,7 @@ class BackupService:
     # Restore execution
     # ------------------------------------------------------------------
 
-    def _do_restore(self, backup_id: int) -> None:
+    def _run_restore(self, backup_id: int) -> None:
         from app.database import SessionLocal
         from app.models import BackupRecord, LogEntry
         from app.services.docker_service import docker_service
