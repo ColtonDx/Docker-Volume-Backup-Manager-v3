@@ -85,6 +85,12 @@ def update_settings(bundle: SettingsBundle, db: Session = Depends(get_db)):
     from app.syslog_handler import configure_syslog
     configure_syslog(bundle.settings)
 
+    # Reconfigure scheduler timezone if it changed
+    new_tz = bundle.settings.get("timezone")
+    if new_tz and isinstance(new_tz, str) and new_tz.strip():
+        from app.services.scheduler_service import scheduler_service
+        scheduler_service.reconfigure_timezone(new_tz.strip())
+
     return get_settings(db)
 
 

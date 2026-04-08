@@ -18,25 +18,42 @@ class SchedulerService:
     """Manages the APScheduler instance that fires backup jobs on cron schedules."""
 
     def __init__(self) -> None:
-        from app.config import settings
-        self._scheduler = BackgroundScheduler(timezone=settings.TIMEZONE)
+        self._scheduler: BackgroundScheduler | None = None
 
     def start(self) -> None:
         """Start the scheduler and sync jobs from the database."""
+        from app.config import settings
+        self._scheduler = BackgroundScheduler(timezone=settings.TIMEZONE)
         self._scheduler.start()
         self.sync_jobs()
-        logger.info("Scheduler started")
+        logger.info("Scheduler started with timezone '%s'", settings.TIMEZONE)
 
     def shutdown(self) -> None:
-        if self._scheduler.running:
+        if self._scheduler and self._scheduler.running:
             self._scheduler.shutdown(wait=False)
             logger.info("Scheduler shut down")
+
+    def reconfigure_timezone(self, tz: str) -> None:
+        """Restart the scheduler with a new timezone and re-sync all jobs."""
+        from app.config import settings
+        was_running = self._scheduler and self._scheduler.running
+        if was_running:
+            self._scheduler.shutdown(wait=False)
+        settings.TIMEZONE = tz
+        self._scheduler = BackgroundScheduler(timezone=tz)
+        if was_running:
+            self._scheduler.start()
+            self.sync_jobs()
+        logger.info("Scheduler reconfigured with timezone '%s'", tz)
 
     def sync_jobs(self) -> None:
         """Synchronise APScheduler jobs with the database.
 
         Call this after any change to schedules or backup jobs.
         """
+        if not self._scheduler or not self._scheduler.running:
+            return
+
         from app.database import SessionLocal
         from app.models import BackupJob
 
@@ -57,7 +74,7 @@ class SchedulerService:
                     continue
                 try:
                     trigger = self._parse_cron(schedule.cron)
-                    self._scheduler.add_job(
+                    self._scheduler.add_job(  # type: ignore[union-attr]
                         self._run_backup,
                         trigger=trigger,
                         args=[bj.id],

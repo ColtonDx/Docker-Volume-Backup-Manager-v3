@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,17 +10,18 @@ import { ColorThemeProvider } from "@/contexts/ColorThemeContext";
 import { AutoRefreshProvider } from "@/contexts/AutoRefreshContext";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Login from "./pages/Login";
-import Index from "./pages/Index";
-import BackupJobs from "./pages/BackupJobs";
-import Schedules from "./pages/Schedules";
-import Notifications from "./pages/Notifications";
-import Storages from "./pages/Storages";
-import Rotations from "./pages/Rotations";
-import Logs from "./pages/Logs";
-import Restore from "./pages/Restore";
-import Settings from "./pages/Settings";
-import JobDetail from "./pages/JobDetail";
-import NotFound from "./pages/NotFound";
+
+const Index = lazy(() => import("./pages/Index"));
+const BackupJobs = lazy(() => import("./pages/BackupJobs"));
+const Schedules = lazy(() => import("./pages/Schedules"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const Storages = lazy(() => import("./pages/Storages"));
+const Rotations = lazy(() => import("./pages/Rotations"));
+const Logs = lazy(() => import("./pages/Logs"));
+const Restore = lazy(() => import("./pages/Restore"));
+const Settings = lazy(() => import("./pages/Settings"));
+const JobDetail = lazy(() => import("./pages/JobDetail"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,19 +43,21 @@ function AppRoutes() {
 
   return (
     <MainLayout>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/jobs" element={<BackupJobs />} />
-        <Route path="/jobs/:id" element={<JobDetail />} />
-        <Route path="/schedules" element={<Schedules />} />
-        <Route path="/notifications" element={<Notifications />} />
-        <Route path="/storages" element={<Storages />} />
-        <Route path="/rotations" element={<Rotations />} />
-        <Route path="/logs" element={<Logs />} />
-        <Route path="/restore" element={<Restore />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/jobs" element={<BackupJobs />} />
+          <Route path="/jobs/:id" element={<JobDetail />} />
+          <Route path="/schedules" element={<Schedules />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/storages" element={<Storages />} />
+          <Route path="/rotations" element={<Rotations />} />
+          <Route path="/logs" element={<Logs />} />
+          <Route path="/restore" element={<Restore />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
     </MainLayout>
   );
 }
