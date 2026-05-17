@@ -347,17 +347,6 @@ export default function Settings() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Default Encryption</Label>
-                <Select value={(form.encryption as string) || "none"} onValueChange={(v) => set("encryption", v)}>
-                  <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="aes128">AES-128</SelectItem>
-                    <SelectItem value="aes256">AES-256</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
             <div className="flex items-center justify-between">
               <div><Label>Verify Backups</Label><p className="text-sm text-muted-foreground">Automatically verify backup integrity</p></div>

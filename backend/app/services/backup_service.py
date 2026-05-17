@@ -200,7 +200,10 @@ class BackupService:
                         volume_names_set.add(v["name"])
 
             if not all_volumes:
-                self._log(db, "warning", job.name, "No volumes found for matching containers")
+                raise RuntimeError(
+                    f"No volumes found on containers matched by '{label_key}={label_value}'. "
+                    "Ensure the containers have named volumes attached."
+                )
 
             # 3. Stop containers
             running_ids = [

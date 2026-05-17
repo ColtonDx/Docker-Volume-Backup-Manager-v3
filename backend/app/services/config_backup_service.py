@@ -250,6 +250,9 @@ class ConfigBackupService:
         channel = db.query(NotificationChannel).get(int(notification_id))
         if not channel or not channel.enabled:
             return
+        subscribed = json.loads(channel.events_json or "[]")
+        if event not in subscribed:
+            return
         config = json.loads(channel.config_json or "{}")
         try:
             notification_service._send(channel.type, config, "DVBM Config Backup", event, message)

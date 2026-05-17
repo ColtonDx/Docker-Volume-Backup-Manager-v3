@@ -37,7 +37,6 @@ DEFAULTS: dict[str, Any] = {
     "rclone_flags": "",
     "rclone_config_text": "",
     "default_compression": "gzip",
-    "default_encryption": "none",
     "verify_backups": True,
     "parallel_uploads": True,
     "notify_on_success": False,
