@@ -1,16 +1,17 @@
-import { 
-  Database, 
-  Calendar, 
-  Bell, 
-  HardDrive, 
-  RotateCcw, 
-  FileText, 
+import {
+  Database,
+  Calendar,
+  Bell,
+  HardDrive,
+  RotateCcw,
+  FileText,
   Settings,
   Container,
   LayoutDashboard,
   LogOut,
   ArchiveRestore,
-  RefreshCw
+  RefreshCw,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAutoRefresh, REFRESH_OPTIONS } from "@/contexts/AutoRefreshContext";
@@ -33,6 +34,8 @@ import {
 const mainNavItems = [
   { title: "Overview", url: "/", icon: LayoutDashboard },
   { title: "Backup Jobs", url: "/jobs", icon: Database },
+  { title: "Job Queue", url: "/active-jobs", icon: Activity },
+  { title: "Restore", url: "/restore", icon: ArchiveRestore },
 ];
 
 const configNavItems = [
@@ -44,7 +47,6 @@ const configNavItems = [
 
 const systemNavItems = [
   { title: "Logs", url: "/logs", icon: FileText },
-  { title: "Restore", url: "/restore", icon: ArchiveRestore },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

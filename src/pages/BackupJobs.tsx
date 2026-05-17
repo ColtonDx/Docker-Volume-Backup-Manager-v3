@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, MoreVertical, Play, Pause, Trash2, Edit, Database, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Plus, Play, Pause, PlayCircle, Trash2, Edit, Database, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -16,14 +16,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { fetchJobs, createJob, updateJob, deleteJob, runJob, pauseJob, resumeJob, fetchStorages, fetchSchedules, fetchRotations, fetchSettings } from "@/api";
 import type { BackupJob } from "@/api/types";
 
@@ -38,10 +38,14 @@ export default function BackupJobs() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [editingJob, setEditingJob] = useState<BackupJob | null>(null);
   const [formData, setFormData] = useState({ name: "", label_key: "", label_value: "", storage_id: "", schedule_id: "", retention_id: "" });
+  const [submitted, setSubmitted] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const { data: jobs = [], isLoading } = useQuery({ queryKey: ["jobs"], queryFn: fetchJobs });
+  const { data: jobs = [], isLoading } = useQuery({
+    queryKey: ["jobs"],
+    queryFn: fetchJobs,
+  });
   const { data: storages = [] } = useQuery({ queryKey: ["storages"], queryFn: fetchStorages });
   const { data: schedules = [] } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
   const { data: rotations = [] } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
@@ -151,12 +155,14 @@ export default function BackupJobs() {
 
   const openCreate = () => {
     setEditingJob(null);
+    setSubmitted(false);
     setFormData({ name: "", label_key: defaultLabelKey, label_value: "", storage_id: "", schedule_id: "", retention_id: "" });
     setDialogOpen(true);
   };
 
   const openEdit = (job: BackupJob) => {
     setEditingJob(job);
+    setSubmitted(false);
     setFormData({
       name: job.name,
       label_key: job.label_key || defaultLabelKey,
@@ -169,10 +175,9 @@ export default function BackupJobs() {
   };
 
   const handleSave = () => {
-    if (!formData.name || !formData.storage_id) return;
-    // Prevent duplicate names (case-insensitive)
+    setSubmitted(true);
     const nameTaken = jobs.some((j) => j.name.toLowerCase() === formData.name.trim().toLowerCase() && j.id !== editingJob?.id);
-    if (nameTaken) return;
+    if (!formData.name.trim() || !formData.storage_id || nameTaken) return;
     if (editingJob) {
       updateMutation.mutate({ id: editingJob.id, data: formData });
     } else {
@@ -188,6 +193,8 @@ export default function BackupJobs() {
   };
 
   const isDuplicateName = formData.name.trim() !== "" && jobs.some((j) => j.name.toLowerCase() === formData.name.trim().toLowerCase() && j.id !== editingJob?.id);
+  const missingName = submitted && !formData.name.trim();
+  const missingStorage = submitted && !formData.storage_id;
 
   return (
     <div>
@@ -206,8 +213,15 @@ export default function BackupJobs() {
               </DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
-                  <Label htmlFor="job-name">Job Name</Label>
-                  <Input id="job-name" placeholder="e.g. postgres-nightly" className={`bg-background border-border ${isDuplicateName ? "border-destructive focus-visible:ring-destructive" : ""}`} value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+                  <Label htmlFor="job-name">Job Name <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="job-name"
+                    placeholder="e.g. postgres-nightly"
+                    className={`bg-background border-border ${(missingName || isDuplicateName) ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                    value={formData.name}
+                    onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                  />
+                  {missingName && <p className="text-xs text-destructive">Job name is required</p>}
                   {isDuplicateName && <p className="text-xs text-destructive">A job with this name already exists</p>}
                 </div>
                 <div className="space-y-2">
@@ -220,21 +234,30 @@ export default function BackupJobs() {
                   <p className="text-xs text-muted-foreground">Containers with label <code className="text-foreground">{formData.label_key || defaultLabelKey}={formData.label_value || formData.name || "value"}</code> will be matched. Leave value empty to use the job name.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Storage Backend</Label>
+                  <Label>Storage Backend <span className="text-destructive">*</span></Label>
                   <Select value={formData.storage_id} onValueChange={(v) => setFormData((p) => ({ ...p, storage_id: v }))}>
-                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select storage" /></SelectTrigger>
-                    <SelectContent className="bg-popover border-border">
-                      {storages.map((s) => (
-                        <SelectItem key={s.id} value={s.id.toString()}>{s.name} ({s.type})</SelectItem>
-                      ))}
+                    <SelectTrigger className={`bg-background border-border ${missingStorage ? "border-destructive focus-visible:ring-destructive" : ""}`}>
+                      <SelectValue placeholder="Select storage" />
+                    </SelectTrigger>
+                    <SelectContent portal={false} className="bg-popover border-border">
+                      {storages.length === 0
+                        ? <SelectItem value="__none__" disabled>No storage backends configured</SelectItem>
+                        : storages.map((s) => (
+                            <SelectItem key={s.id} value={s.id.toString()}>{s.name} ({s.type})</SelectItem>
+                          ))
+                      }
                     </SelectContent>
                   </Select>
+                  {missingStorage && <p className="text-xs text-destructive">A storage backend is required</p>}
+                  {storages.length === 0 && !missingStorage && (
+                    <p className="text-xs text-muted-foreground">No storage backends yet — add one in the <a href="/storages" className="underline text-foreground">Storages</a> page first</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Schedule</Label>
                   <Select value={formData.schedule_id || "__manual__"} onValueChange={(v) => setFormData((p) => ({ ...p, schedule_id: v === "__manual__" ? "" : v }))}>
                     <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Manual (no schedule)" /></SelectTrigger>
-                    <SelectContent className="bg-popover border-border">
+                    <SelectContent portal={false} className="bg-popover border-border">
                       <SelectItem value="__manual__">Manual (no schedule)</SelectItem>
                       {schedules.map((s) => (
                         <SelectItem key={s.id} value={s.id.toString()}>{s.name} ({s.cron})</SelectItem>
@@ -246,7 +269,7 @@ export default function BackupJobs() {
                   <Label>Retention Policy</Label>
                   <Select value={formData.retention_id || "__none__"} onValueChange={(v) => setFormData((p) => ({ ...p, retention_id: v === "__none__" ? "" : v }))}>
                     <SelectTrigger className="bg-background border-border"><SelectValue placeholder="None (keep all)" /></SelectTrigger>
-                    <SelectContent className="bg-popover border-border">
+                    <SelectContent portal={false} className="bg-popover border-border">
                       <SelectItem value="__none__">None (keep all)</SelectItem>
                       {rotations.map((r) => (
                         <SelectItem key={r.id} value={r.id.toString()}>{r.name} ({r.retention_days}d)</SelectItem>
@@ -264,6 +287,7 @@ export default function BackupJobs() {
         }
       />
 
+      <TooltipProvider>
       <Card className="glass-panel border-border animate-fade-in">
         <CardContent className="p-0">
           {isLoading ? (
@@ -306,26 +330,40 @@ export default function BackupJobs() {
                       {job.last_run ? new Date(job.last_run).toLocaleString() : "Never"}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-popover border-border">
-                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => runMutation.mutate(job.id)}>
-                            <Play className="h-4 w-4" /> Run Now
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => job.enabled ? pauseMutation.mutate(job.id) : resumeMutation.mutate(job.id)}>
-                            <Pause className="h-4 w-4" /> {job.enabled ? "Pause Job" : "Resume Job"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => openEdit(job)}>
-                            <Edit className="h-4 w-4" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-border" />
-                          <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeleteId(job.id)}>
-                            <Trash2 className="h-4 w-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => runMutation.mutate(job.id)} disabled={runMutation.isPending}>
+                              <Play className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Run Now</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => job.enabled ? pauseMutation.mutate(job.id) : resumeMutation.mutate(job.id)}>
+                              {job.enabled ? <Pause className="h-4 w-4" /> : <PlayCircle className="h-4 w-4" />}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>{job.enabled ? "Pause Job" : "Resume Job"}</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(job)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit Job</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteId(job.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete Job</TooltipContent>
+                        </Tooltip>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -334,6 +372,7 @@ export default function BackupJobs() {
           )}
         </CardContent>
       </Card>
+      </TooltipProvider>
 
       <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>

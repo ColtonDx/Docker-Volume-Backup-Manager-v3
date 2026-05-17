@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check, Download, Upload, Radio } from "lucide-react";
+import { Save, Shield, Database, Clock, Server, CloudCog, Terminal, Palette, Check, Download, Upload, Radio, Play } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -16,7 +16,7 @@ import {
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchSettings, updateSettings, resetSettings, clearLogs } from "@/api";
+import { fetchSettings, updateSettings, resetSettings, clearLogs, fetchStorages, fetchSchedules, fetchNotifications, fetchRotations, triggerConfigBackup } from "@/api";
 import { useColorTheme, THEMES, type ThemeId } from "@/contexts/ColorThemeContext";
 
 export default function Settings() {
@@ -27,6 +27,10 @@ export default function Settings() {
 
   const { data, isLoading } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
   const s = (data?.settings ?? {}) as Record<string, unknown>;
+  const { data: storages = [] } = useQuery({ queryKey: ["storages"], queryFn: fetchStorages });
+  const { data: schedules = [] } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
+  const { data: notifications = [] } = useQuery({ queryKey: ["notifications"], queryFn: fetchNotifications });
+  const { data: rotations = [] } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
 
   const [form, setForm] = useState<Record<string, unknown>>({});
 
@@ -50,6 +54,11 @@ export default function Settings() {
   const clearMut = useMutation({
     mutationFn: () => clearLogs(),
     onSuccess: () => { toast.success("Logs cleared"); queryClient.invalidateQueries({ queryKey: ["logs"] }); },
+    onError: (err: Error) => toast.error(err.message),
+  });
+  const configBackupNowMut = useMutation({
+    mutationFn: triggerConfigBackup,
+    onSuccess: (res) => toast.success(res.message),
     onError: (err: Error) => toast.error(err.message),
   });
 
@@ -421,6 +430,101 @@ export default function Settings() {
                 <Upload className="h-4 w-4" />{importing ? "Importing..." : "Import .zip"}
               </Button>
             </div>
+            <Separator className="bg-border" />
+            {/* Automated config backup */}
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Automated Config Backup</Label>
+                <p className="text-sm text-muted-foreground">Automatically upload the configuration export to a storage backend on a schedule</p>
+              </div>
+              <Switch checked={!!form.config_backup_enabled} onCheckedChange={(v) => set("config_backup_enabled", v)} />
+            </div>
+            {!!form.config_backup_enabled && (
+              <div className="space-y-4 pl-0 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Storage Backend</Label>
+                    <Select
+                      value={form.config_backup_storage_id ? String(form.config_backup_storage_id) : ""}
+                      onValueChange={(v) => set("config_backup_storage_id", v ? Number(v) : null)}
+                    >
+                      <SelectTrigger className="bg-background border-border">
+                        <SelectValue placeholder="Select storage..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        {storages.map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.type})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Schedule</Label>
+                    <Select
+                      value={form.config_backup_schedule_id ? String(form.config_backup_schedule_id) : ""}
+                      onValueChange={(v) => set("config_backup_schedule_id", v ? Number(v) : null)}
+                    >
+                      <SelectTrigger className="bg-background border-border">
+                        <SelectValue placeholder="Select schedule..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        {schedules.map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.cron})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Notification Channel <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                    <Select
+                      value={form.config_backup_notification_id ? String(form.config_backup_notification_id) : "__none__"}
+                      onValueChange={(v) => set("config_backup_notification_id", v === "__none__" ? null : Number(v))}
+                    >
+                      <SelectTrigger className="bg-background border-border">
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        <SelectItem value="__none__">None</SelectItem>
+                        {notifications.filter((n) => n.enabled).map((n) => (
+                          <SelectItem key={n.id} value={String(n.id)}>{n.name} ({n.type})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Retention Policy <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                    <Select
+                      value={form.config_backup_retention_id ? String(form.config_backup_retention_id) : "__none__"}
+                      onValueChange={(v) => set("config_backup_retention_id", v === "__none__" ? null : Number(v))}
+                    >
+                      <SelectTrigger className="bg-background border-border">
+                        <SelectValue placeholder="None (keep all)" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        <SelectItem value="__none__">None (keep all)</SelectItem>
+                        {rotations.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>{r.name} ({r.retention_days}d, max {r.max_backups})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Old config backup files will be pruned according to the selected policy</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    disabled={configBackupNowMut.isPending || !form.config_backup_storage_id}
+                    onClick={() => configBackupNowMut.mutate()}
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    {configBackupNowMut.isPending ? "Running..." : "Run Now"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">Uploads a config backup immediately using the settings above (save first)</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

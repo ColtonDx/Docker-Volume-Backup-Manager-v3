@@ -109,7 +109,7 @@ class StorageService:
 
     @staticmethod
     def _localfs_upload(config: dict, local_path: str, remote_name: str) -> str:
-        dest_dir = config.get("path", "/backups")
+        dest_dir = config.get("path", "/local-backups")
         os.makedirs(dest_dir, exist_ok=True)
         dest = os.path.join(dest_dir, remote_name)
         # Avoid error when source and destination resolve to the same file

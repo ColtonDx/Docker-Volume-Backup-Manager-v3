@@ -29,7 +29,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 
 # Default settings values
 DEFAULTS: dict[str, Any] = {
-    "timezone": "utc",
+    "timezone": "UTC",
     "default_label_key": "dvbm.job",
     "rclone_enabled": False,
     "rclone_binary": "/usr/bin/rclone",
@@ -50,6 +50,12 @@ DEFAULTS: dict[str, Any] = {
     "syslog_port": 514,
     "syslog_protocol": "udp",
     "syslog_facility": "local0",
+    # Automated config backup
+    "config_backup_enabled": False,
+    "config_backup_storage_id": None,
+    "config_backup_schedule_id": None,
+    "config_backup_notification_id": None,
+    "config_backup_retention_id": None,
 }
 
 
@@ -86,10 +92,15 @@ def update_settings(bundle: SettingsBundle, db: Session = Depends(get_db)):
     configure_syslog(bundle.settings)
 
     # Reconfigure scheduler timezone if it changed
-    new_tz = bundle.settings.get("timezone")
-    if new_tz and isinstance(new_tz, str) and new_tz.strip():
+    try:
+        new_tz = bundle.settings.get("timezone")
         from app.services.scheduler_service import scheduler_service
-        scheduler_service.reconfigure_timezone(new_tz.strip())
+        if new_tz and isinstance(new_tz, str) and new_tz.strip():
+            scheduler_service.reconfigure_timezone(new_tz.strip())
+        else:
+            scheduler_service.sync_jobs()
+    except Exception as exc:
+        logger.warning("Scheduler sync after settings save failed: %s", exc)
 
     return get_settings(db)
 
@@ -117,7 +128,21 @@ def reset_settings(db: Session = Depends(get_db)):
     """Reset all settings to defaults."""
     db.query(Setting).delete(synchronize_session=False)
     db.commit()
+    from app.services.scheduler_service import scheduler_service
+    scheduler_service.sync_jobs()
     return get_settings(db)
+
+
+@router.post("/config-backup/run")
+def run_config_backup_now():
+    """Manually trigger a config backup immediately."""
+    import threading
+
+    from app.services.config_backup_service import config_backup_service
+
+    thread = threading.Thread(target=config_backup_service.run, daemon=True)
+    thread.start()
+    return {"message": "Config backup started"}
 
 
 @router.get("/export")

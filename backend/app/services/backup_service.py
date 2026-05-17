@@ -36,9 +36,19 @@ class BackupService:
         # Default is 1 (sequential) to prevent concurrent jobs from stopping
         # the same containers or corrupting shared volumes.
         self._semaphore = threading.Semaphore(settings.MAX_CONCURRENT_BACKUPS)
+        # Tracks job IDs waiting for the semaphore (not yet running).
+        self._queued: set[int] = set()
+        self._queue_lock = threading.Lock()
+
+    @property
+    def queued_job_ids(self) -> frozenset[int]:
+        with self._queue_lock:
+            return frozenset(self._queued)
 
     def run_backup(self, job_id: int) -> None:
         """Execute a backup for the given job. Runs in a background thread."""
+        with self._queue_lock:
+            self._queued.add(job_id)
         thread = threading.Thread(target=self._do_backup, args=(job_id,), daemon=True)
         thread.start()
 
@@ -53,6 +63,8 @@ class BackupService:
 
     def _do_backup(self, job_id: int) -> None:
         with self._semaphore:
+            with self._queue_lock:
+                self._queued.discard(job_id)
             self._run_with_timeout(job_id, kind="backup")
 
     def _do_restore(self, backup_id: int) -> None:

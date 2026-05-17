@@ -117,7 +117,16 @@ def list_jobs(db: Session = Depends(get_db)):
         ).all()
     }
 
-    return [_enrich_job(j, db, all_containers, last_records) for j in jobs]
+    from app.services.backup_service import backup_service
+    queued_ids = backup_service.queued_job_ids
+
+    results = []
+    for j in jobs:
+        enriched = _enrich_job(j, db, all_containers, last_records)
+        if j.id in queued_ids and enriched["status"] not in ("running",):
+            enriched["status"] = "queued"
+        results.append(enriched)
+    return results
 
 
 @router.get("/{job_id}", response_model=BackupJobOut)

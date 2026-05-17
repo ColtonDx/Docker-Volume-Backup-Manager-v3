@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type Status = "active" | "running" | "success" | "warning" | "error" | "idle" | "pending";
+type Status = "active" | "running" | "queued" | "success" | "warning" | "error" | "idle" | "pending";
 
 interface StatusBadgeProps {
   status: Status;
@@ -20,6 +20,12 @@ const statusConfig: Record<Status, { dot: string; bg: string; text: string; defa
     bg: "bg-primary/10",
     text: "text-primary",
     defaultLabel: "Running",
+  },
+  queued: {
+    dot: "bg-warning animate-pulse",
+    bg: "bg-warning/10",
+    text: "text-warning",
+    defaultLabel: "In Queue",
   },
   success: {
     dot: "bg-success",

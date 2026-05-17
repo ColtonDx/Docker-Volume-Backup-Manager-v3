@@ -56,11 +56,6 @@ export default function Login() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </Button>
-            <p className="text-xs text-center text-muted-foreground">
-              Default password: <code className="text-foreground">admin</code>
-              <br />
-              <span className="text-xs">(set via APP_PASSWORD env var)</span>
-            </p>
           </form>
         </CardContent>
       </Card>
