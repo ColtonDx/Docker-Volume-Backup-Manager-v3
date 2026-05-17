@@ -4,7 +4,7 @@ from typing import List
 
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -211,38 +211,44 @@ def get_job_stats(job_id: int, db: Session = Depends(get_db)):
 
     enriched = _enrich_job(job, db)
 
-    # All backup records for this job
-    all_records = (
+    # SQLite returns naive datetimes, compare with naive UTC
+    thirty_days_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
+    one_day_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
+
+    # All aggregated stats in a single SQL query — no Python loops over full record set
+    agg = (
+        db.query(
+            func.count().label("total_backups"),
+            func.coalesce(func.sum(BackupRecord.size_bytes), 0).label("total_size"),
+            func.avg(BackupRecord.duration_seconds).label("avg_duration"),
+            func.sum(case((BackupRecord.started_at >= thirty_days_ago, 1), else_=0)).label("total_recent"),
+            func.sum(case((
+                (BackupRecord.started_at >= thirty_days_ago) & (BackupRecord.status == "success"), 1
+            ), else_=0)).label("success_recent"),
+            func.sum(case((
+                (BackupRecord.started_at >= one_day_ago) & BackupRecord.status.in_(["error", "warning"]), 1
+            ), else_=0)).label("errors_24h"),
+        )
+        .filter(BackupRecord.job_id == job.id)
+        .one()
+    )
+
+    total_backups = agg.total_backups or 0
+    total_size = agg.total_size or 0
+    avg_duration = round(float(agg.avg_duration), 1) if agg.avg_duration is not None else None
+    total_recent = agg.total_recent or 0
+    success_recent = agg.success_recent or 0
+    errors_24h = agg.errors_24h or 0
+    success_rate = round((success_recent / total_recent * 100) if total_recent > 0 else -1.0, 1)
+
+    # Recent backup records (last 20 only — no full table scan)
+    recent_backups = (
         db.query(BackupRecord)
         .filter(BackupRecord.job_id == job.id)
         .order_by(BackupRecord.started_at.desc())
+        .limit(20)
         .all()
     )
-
-    # 30-day success rate  (SQLite returns naive datetimes, so compare with naive UTC)
-    thirty_days_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
-    recent_records = [r for r in all_records if r.started_at and r.started_at >= thirty_days_ago]
-    total_recent = len(recent_records)
-    success_recent = sum(1 for r in recent_records if r.status == "success")
-    success_rate = round((success_recent / total_recent * 100) if total_recent > 0 else -1.0, 1)
-
-    # Aggregated stats
-    total_backups = len(all_records)
-    total_size = sum(r.size_bytes or 0 for r in all_records)
-    avg_duration = None
-    durations = [r.duration_seconds for r in all_records if r.duration_seconds is not None]
-    if durations:
-        avg_duration = round(sum(durations) / len(durations), 1)
-
-    # Error count in last 24h
-    one_day_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
-    errors_24h = sum(
-        1 for r in all_records
-        if r.started_at and r.started_at >= one_day_ago and r.status in ("error", "warning")
-    )
-
-    # Recent backup records (last 20)
-    recent_backups = all_records[:20]
 
     # Recent logs for this job
     logs = (

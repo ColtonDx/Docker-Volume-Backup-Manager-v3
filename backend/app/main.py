@@ -56,6 +56,30 @@ def _configure_syslog_on_startup() -> None:
         _log.warning("Could not configure syslog on startup: %s", exc)
 
 
+def _configure_timezone_on_startup() -> None:
+    """Read the 'timezone' DB setting and apply it before the scheduler starts."""
+    import json, logging
+    _log = logging.getLogger(__name__)
+    try:
+        from app.database import SessionLocal
+        from app.models import Setting
+        db = SessionLocal()
+        try:
+            row = db.query(Setting).get("timezone")
+            if row and row.value:
+                try:
+                    tz = json.loads(row.value)
+                except (json.JSONDecodeError, TypeError):
+                    tz = row.value
+                if isinstance(tz, str) and tz.strip():
+                    settings.TIMEZONE = tz.strip()
+                    _log.info("Timezone loaded from DB: %s", settings.TIMEZONE)
+        finally:
+            db.close()
+    except Exception as exc:
+        _log.warning("Could not load timezone from DB on startup: %s", exc)
+
+
 def _sync_rclone_config_on_startup() -> None:
     """Ensure the rclone config file is written to disk from DB settings."""
     import json, logging
@@ -88,6 +112,7 @@ def _sync_rclone_config_on_startup() -> None:
 async def lifespan(app: FastAPI):
     # Startup
     init_db()
+    _configure_timezone_on_startup()
     _sync_rclone_config_on_startup()
     _configure_syslog_on_startup()
     scheduler_service.start()
