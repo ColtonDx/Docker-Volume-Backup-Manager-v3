@@ -27,7 +27,7 @@ export default function ActiveJobs() {
   return (
     <div>
       <PageHeader
-        title="Active Jobs"
+        title="Job Queue"
         description="Jobs currently running or waiting in the queue"
       />
 

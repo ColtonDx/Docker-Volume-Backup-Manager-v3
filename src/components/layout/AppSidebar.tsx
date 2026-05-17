@@ -34,7 +34,8 @@ import {
 const mainNavItems = [
   { title: "Overview", url: "/", icon: LayoutDashboard },
   { title: "Backup Jobs", url: "/jobs", icon: Database },
-  { title: "Active Jobs", url: "/active-jobs", icon: Activity },
+  { title: "Job Queue", url: "/active-jobs", icon: Activity },
+  { title: "Restore", url: "/restore", icon: ArchiveRestore },
 ];
 
 const configNavItems = [
@@ -46,7 +47,6 @@ const configNavItems = [
 
 const systemNavItems = [
   { title: "Logs", url: "/logs", icon: FileText },
-  { title: "Restore", url: "/restore", icon: ArchiveRestore },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
