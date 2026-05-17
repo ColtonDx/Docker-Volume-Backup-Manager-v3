@@ -50,6 +50,12 @@ DEFAULTS: dict[str, Any] = {
     "syslog_port": 514,
     "syslog_protocol": "udp",
     "syslog_facility": "local0",
+    # Automated config backup
+    "config_backup_enabled": False,
+    "config_backup_storage_id": None,
+    "config_backup_schedule_id": None,
+    "config_backup_notification_id": None,
+    "config_backup_keep_count": 5,
 }
 
 
@@ -90,6 +96,10 @@ def update_settings(bundle: SettingsBundle, db: Session = Depends(get_db)):
     if new_tz and isinstance(new_tz, str) and new_tz.strip():
         from app.services.scheduler_service import scheduler_service
         scheduler_service.reconfigure_timezone(new_tz.strip())
+    else:
+        # Re-sync config backup cron job even when timezone didn't change
+        from app.services.scheduler_service import scheduler_service
+        scheduler_service.sync_jobs()
 
     return get_settings(db)
 
@@ -117,7 +127,21 @@ def reset_settings(db: Session = Depends(get_db)):
     """Reset all settings to defaults."""
     db.query(Setting).delete(synchronize_session=False)
     db.commit()
+    from app.services.scheduler_service import scheduler_service
+    scheduler_service.sync_jobs()
     return get_settings(db)
+
+
+@router.post("/config-backup/run")
+def run_config_backup_now():
+    """Manually trigger a config backup immediately."""
+    import threading
+
+    from app.services.config_backup_service import config_backup_service
+
+    thread = threading.Thread(target=config_backup_service.run, daemon=True)
+    thread.start()
+    return {"message": "Config backup started"}
 
 
 @router.get("/export")

@@ -124,4 +124,5 @@ export const testNotification = (id: number) => api.post<TestResponse>(`/notific
 export const fetchSettings = () => api.get<SettingsBundle>("/settings");
 export const updateSettings = (settings: Record<string, unknown>) => api.put<SettingsBundle>("/settings", { settings });
 export const resetSettings = () => api.post<SettingsBundle>("/settings/reset");
+export const triggerConfigBackup = () => api.post<MessageResponse>("/settings/config-backup/run");
 

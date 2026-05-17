@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { RotateCcw, Search, RefreshCw, CheckCircle, Clock, Database, X, ArrowUp, ArrowDown, ArrowUpDown, FileUp } from "lucide-react";
+import { RotateCcw, Search, RefreshCw, CheckCircle, Clock, Database, X, ArrowUp, ArrowDown, ArrowUpDown, FileUp, Trash2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -33,7 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchBackups, restoreBackup, fetchJobs, importBackups } from "@/api";
+import { fetchBackups, restoreBackup, deleteBackup, fetchJobs, importBackups } from "@/api";
 import type { BackupRecord } from "@/api/types";
 
 function formatSize(bytes: number | null): string {
@@ -64,6 +64,7 @@ export default function Restore() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [restoreId, setRestoreId] = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importJobId, setImportJobId] = useState<string>("");
 
@@ -114,6 +115,16 @@ export default function Restore() {
       toast.success(`Restore initiated from backup #${id}`);
       queryClient.invalidateQueries({ queryKey: ["backups"] });
       queryClient.invalidateQueries({ queryKey: ["logs"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteBackup,
+    onSuccess: () => {
+      toast.success("Backup deleted from storage and records");
+      queryClient.invalidateQueries({ queryKey: ["backups"] });
+      setDeleteId(null);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -355,16 +366,28 @@ export default function Restore() {
                       {formatDate(backup.started_at)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 border-border"
-                        disabled={restoreMutation.isPending}
-                        onClick={() => setRestoreId(backup.id)}
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        Restore
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 border-border"
+                          disabled={restoreMutation.isPending}
+                          onClick={() => setRestoreId(backup.id)}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Restore
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => setDeleteId(backup.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -394,6 +417,27 @@ export default function Restore() {
               }}
             >
               Restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Backup</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the backup file from its storage backend and remove the record from DVBM.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteId) deleteMutation.mutate(deleteId); }}
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -54,9 +54,27 @@ def restore_backup(backup_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{backup_id}", status_code=204)
 def delete_backup(backup_id: int, db: Session = Depends(get_db)):
+    import json
+
     record = db.query(BackupRecord).get(backup_id)
     if not record:
         raise HTTPException(status_code=404, detail="Backup record not found")
+
+    # Attempt to delete the file from its storage backend before removing the DB record.
+    # If the storage delete fails we abort so the user can investigate (record stays intact).
+    if record.storage_path:
+        job = record.job  # lazy-joined relationship
+        if job and job.storage:
+            config = json.loads(job.storage.config_json or "{}")
+            from app.services.storage_service import storage_service
+            try:
+                storage_service.delete_remote(job.storage.type, config, record.storage_path)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to delete file from storage: {exc}",
+                )
+
     db.delete(record)
     db.commit()
 

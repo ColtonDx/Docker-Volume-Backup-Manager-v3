@@ -95,8 +95,60 @@ class SchedulerService:
                     logger.error(
                         "Failed to schedule job '%s': %s", bj.name, exc
                     )
+
+            # Register the automated config backup job if configured
+            self._sync_config_backup(db)
         finally:
             db.close()
+
+    def _sync_config_backup(self, db) -> None:
+        """Register or remove the automated config backup APScheduler job."""
+        import json
+
+        from app.models import Schedule, Setting
+
+        CONFIG_JOB_ID = "dvbm-config-backup"
+
+        # Read relevant settings
+        def _get(key, default=None):
+            row = db.query(Setting).get(key)
+            if row is None:
+                return default
+            try:
+                return json.loads(row.value)
+            except (json.JSONDecodeError, TypeError):
+                return row.value
+
+        enabled = _get("config_backup_enabled", False)
+        schedule_id = _get("config_backup_schedule_id")
+
+        if not enabled or not schedule_id:
+            # Remove the job if it was previously scheduled
+            if self._scheduler.get_job(CONFIG_JOB_ID):  # type: ignore[union-attr]
+                self._scheduler.remove_job(CONFIG_JOB_ID)  # type: ignore[union-attr]
+                logger.info("Config backup cron job removed")
+            return
+
+        schedule = db.query(Schedule).get(int(schedule_id))
+        if not schedule or not schedule.enabled or not schedule.cron:
+            if self._scheduler.get_job(CONFIG_JOB_ID):  # type: ignore[union-attr]
+                self._scheduler.remove_job(CONFIG_JOB_ID)  # type: ignore[union-attr]
+            return
+
+        try:
+            trigger = self._parse_cron(schedule.cron)
+            self._scheduler.add_job(  # type: ignore[union-attr]
+                self._run_config_backup,
+                trigger=trigger,
+                id=CONFIG_JOB_ID,
+                replace_existing=True,
+                name="dvbm-config-backup",
+                max_instances=1,
+                coalesce=True,
+            )
+            logger.info("Config backup scheduled with cron '%s'", schedule.cron)
+        except Exception as exc:
+            logger.error("Failed to schedule config backup: %s", exc)
 
     @staticmethod
     def _run_backup(job_id: int) -> None:
@@ -105,6 +157,14 @@ class SchedulerService:
 
         logger.info("Cron trigger: running backup job %d", job_id)
         backup_service.run_backup(job_id)
+
+    @staticmethod
+    def _run_config_backup() -> None:
+        """Callback invoked by APScheduler to trigger a config backup."""
+        from app.services.config_backup_service import config_backup_service
+
+        logger.info("Cron trigger: running config backup")
+        config_backup_service.run()
 
     @staticmethod
     def _parse_cron(cron_expr: str) -> CronTrigger:
