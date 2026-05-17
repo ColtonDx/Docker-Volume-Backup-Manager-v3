@@ -97,7 +97,10 @@ class SchedulerService:
                     )
 
             # Register the automated config backup job if configured
-            self._sync_config_backup(db)
+            try:
+                self._sync_config_backup(db)
+            except Exception as exc:
+                logger.error("Failed to sync config backup job: %s", exc)
         finally:
             db.close()
 

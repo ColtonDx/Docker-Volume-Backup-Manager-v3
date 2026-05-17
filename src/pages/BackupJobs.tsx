@@ -42,7 +42,15 @@ export default function BackupJobs() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const { data: jobs = [], isLoading } = useQuery({ queryKey: ["jobs"], queryFn: fetchJobs });
+  const { data: jobs = [], isLoading } = useQuery({
+    queryKey: ["jobs"],
+    queryFn: fetchJobs,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasActive = data?.some((j) => j.status === "running" || j.status === "queued");
+      return hasActive ? 3000 : false;
+    },
+  });
   const { data: storages = [] } = useQuery({ queryKey: ["storages"], queryFn: fetchStorages });
   const { data: schedules = [] } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
   const { data: rotations = [] } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
@@ -327,7 +335,7 @@ export default function BackupJobs() {
                       {job.last_run ? new Date(job.last_run).toLocaleString() : "Never"}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-0.5">
+                      <div className="flex items-center justify-end gap-1.5">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => runMutation.mutate(job.id)} disabled={runMutation.isPending}>
@@ -370,6 +378,43 @@ export default function BackupJobs() {
         </CardContent>
       </Card>
       </TooltipProvider>
+
+      {(() => {
+        const activeJobs = jobs.filter((j) => j.status === "running" || j.status === "queued");
+        if (activeJobs.length === 0) return null;
+        return (
+          <Card className="glass-panel border-border animate-fade-in mt-4">
+            <CardContent className="p-0">
+              <div className="px-4 py-3 border-b border-border">
+                <p className="text-sm font-medium">Active Jobs</p>
+                <p className="text-xs text-muted-foreground">Jobs currently running or waiting in the queue</p>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border hover:bg-transparent">
+                    <TableHead className="text-muted-foreground">Job Name</TableHead>
+                    <TableHead className="text-muted-foreground">Storage</TableHead>
+                    <TableHead className="text-muted-foreground">Status</TableHead>
+                    <TableHead className="text-muted-foreground">Started</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activeJobs.map((job) => (
+                    <TableRow key={job.id} className="border-border hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/jobs/${job.id}`)}>
+                      <TableCell className="font-medium">{job.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{job.storage?.name || "—"}</TableCell>
+                      <TableCell><StatusBadge status={job.status as "running" | "queued"} /></TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {job.last_run ? new Date(job.last_run).toLocaleString() : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>

@@ -47,7 +47,7 @@ class ConfigBackupService:
             logger.warning("Config backup is enabled but no storage backend is configured")
             return
 
-        keep_count = int(settings_map.get("config_backup_keep_count", 5))
+        retention_id = settings_map.get("config_backup_retention_id")
         notification_id = settings_map.get("config_backup_notification_id")
 
         storage = db.query(StorageBackend).get(int(storage_id))
@@ -94,21 +94,15 @@ class ConfigBackupService:
                 except OSError:
                     pass
 
-        # Apply retention: keep only the N most recent config backup files
-        if keep_count > 0:
+        # Apply retention policy if one is configured
+        if retention_id:
             try:
-                files = storage_service.list_files(storage.type, config, prefix=CONFIG_BACKUP_PREFIX)
-                # Filenames are timestamp-based so alphabetical order == chronological order
-                sorted_files = sorted(files, key=lambda f: f["name"])
-                to_delete = sorted_files[:-keep_count] if len(sorted_files) > keep_count else []
-                for f in to_delete:
-                    try:
-                        storage_service.delete_remote(storage.type, config, f["path"])
-                        logger.info("Config backup retention: deleted %s", f["path"])
-                    except Exception as exc:
-                        logger.warning("Config backup retention: failed to delete %s: %s", f["path"], exc)
+                from app.models import RetentionPolicy
+                policy = db.query(RetentionPolicy).get(int(retention_id))
+                if policy:
+                    self._apply_retention(db, storage, config, policy)
             except Exception as exc:
-                logger.warning("Config backup retention check failed: %s", exc)
+                logger.warning("Config backup retention failed: %s", exc)
 
         msg = f"Config backup completed: {filename}"
         self._log(db, "success", msg)
@@ -117,6 +111,56 @@ class ConfigBackupService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _apply_retention(self, db, storage, config: dict, policy) -> None:
+        """Delete config backup files from storage according to the retention policy."""
+        from app.services.storage_service import storage_service
+
+        files = storage_service.list_files(storage.type, config, prefix=CONFIG_BACKUP_PREFIX)
+        # Filenames are timestamp-based so alphabetical == chronological
+        sorted_files = sorted(files, key=lambda f: f["name"])
+
+        to_delete: list[dict] = []
+
+        # Age-based: mark files older than retention_days for deletion
+        if policy.retention_days and policy.retention_days > 0:
+            cutoff = datetime.now(timezone.utc).timestamp() - policy.retention_days * 86400
+            for f in sorted_files:
+                # Fall back to filename-based date parsing if mtime not available
+                mtime = f.get("mtime")
+                if mtime is not None:
+                    if mtime < cutoff:
+                        to_delete.append(f)
+                else:
+                    try:
+                        # filename: dvbm_config_YYYYMMDD_HHmmss.zip
+                        ts_part = f["name"].replace(CONFIG_BACKUP_PREFIX, "").replace(".zip", "")
+                        dt = datetime.strptime(ts_part, "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
+                        if dt.timestamp() < cutoff:
+                            to_delete.append(f)
+                    except Exception:
+                        pass
+
+        # Count-based: also enforce max_backups
+        if policy.max_backups and policy.max_backups > 0:
+            remaining = [f for f in sorted_files if f not in to_delete]
+            excess = len(remaining) - policy.max_backups
+            if excess > 0:
+                to_delete.extend(remaining[:excess])
+
+        # Respect min_backups: don't delete below the floor
+        min_keep = policy.min_backups or 1
+        would_survive = [f for f in sorted_files if f not in to_delete]
+        while len(would_survive) < min_keep and to_delete:
+            to_delete.pop()
+            would_survive = [f for f in sorted_files if f not in to_delete]
+
+        for f in to_delete:
+            try:
+                storage_service.delete_remote(storage.type, config, f["path"])
+                logger.info("Config backup retention: deleted %s", f["path"])
+            except Exception as exc:
+                logger.warning("Config backup retention: failed to delete %s: %s", f["path"], exc)
 
     def _load_settings(self, db) -> dict:
         from app.models import Setting

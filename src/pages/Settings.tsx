@@ -16,7 +16,7 @@ import {
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchSettings, updateSettings, resetSettings, clearLogs, fetchStorages, fetchSchedules, fetchNotifications, triggerConfigBackup } from "@/api";
+import { fetchSettings, updateSettings, resetSettings, clearLogs, fetchStorages, fetchSchedules, fetchNotifications, fetchRotations, triggerConfigBackup } from "@/api";
 import { useColorTheme, THEMES, type ThemeId } from "@/contexts/ColorThemeContext";
 
 export default function Settings() {
@@ -30,6 +30,7 @@ export default function Settings() {
   const { data: storages = [] } = useQuery({ queryKey: ["storages"], queryFn: fetchStorages });
   const { data: schedules = [] } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
   const { data: notifications = [] } = useQuery({ queryKey: ["notifications"], queryFn: fetchNotifications });
+  const { data: rotations = [] } = useQuery({ queryKey: ["rotations"], queryFn: fetchRotations });
 
   const [form, setForm] = useState<Record<string, unknown>>({});
 
@@ -491,16 +492,22 @@ export default function Settings() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Keep Last N Backups</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={100}
-                      className="bg-background border-border"
-                      value={String(form.config_backup_keep_count ?? 5)}
-                      onChange={(e) => set("config_backup_keep_count", Math.max(1, Number(e.target.value)))}
-                    />
-                    <p className="text-xs text-muted-foreground">Older config backup files on storage will be deleted automatically</p>
+                    <Label>Retention Policy <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                    <Select
+                      value={form.config_backup_retention_id ? String(form.config_backup_retention_id) : "__none__"}
+                      onValueChange={(v) => set("config_backup_retention_id", v === "__none__" ? null : Number(v))}
+                    >
+                      <SelectTrigger className="bg-background border-border">
+                        <SelectValue placeholder="None (keep all)" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        <SelectItem value="__none__">None (keep all)</SelectItem>
+                        {rotations.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>{r.name} ({r.retention_days}d, max {r.max_backups})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Old config backup files will be pruned according to the selected policy</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">

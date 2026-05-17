@@ -55,7 +55,7 @@ DEFAULTS: dict[str, Any] = {
     "config_backup_storage_id": None,
     "config_backup_schedule_id": None,
     "config_backup_notification_id": None,
-    "config_backup_keep_count": 5,
+    "config_backup_retention_id": None,
 }
 
 
@@ -92,14 +92,15 @@ def update_settings(bundle: SettingsBundle, db: Session = Depends(get_db)):
     configure_syslog(bundle.settings)
 
     # Reconfigure scheduler timezone if it changed
-    new_tz = bundle.settings.get("timezone")
-    if new_tz and isinstance(new_tz, str) and new_tz.strip():
+    try:
+        new_tz = bundle.settings.get("timezone")
         from app.services.scheduler_service import scheduler_service
-        scheduler_service.reconfigure_timezone(new_tz.strip())
-    else:
-        # Re-sync config backup cron job even when timezone didn't change
-        from app.services.scheduler_service import scheduler_service
-        scheduler_service.sync_jobs()
+        if new_tz and isinstance(new_tz, str) and new_tz.strip():
+            scheduler_service.reconfigure_timezone(new_tz.strip())
+        else:
+            scheduler_service.sync_jobs()
+    except Exception as exc:
+        logger.warning("Scheduler sync after settings save failed: %s", exc)
 
     return get_settings(db)
 
