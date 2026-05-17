@@ -20,6 +20,7 @@ const Rotations = lazy(() => import("./pages/Rotations"));
 const Logs = lazy(() => import("./pages/Logs"));
 const Restore = lazy(() => import("./pages/Restore"));
 const Settings = lazy(() => import("./pages/Settings"));
+const ActiveJobs = lazy(() => import("./pages/ActiveJobs"));
 const JobDetail = lazy(() => import("./pages/JobDetail"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -48,6 +49,7 @@ function AppRoutes() {
           <Route path="/" element={<Index />} />
           <Route path="/jobs" element={<BackupJobs />} />
           <Route path="/jobs/:id" element={<JobDetail />} />
+          <Route path="/active-jobs" element={<ActiveJobs />} />
           <Route path="/schedules" element={<Schedules />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/storages" element={<Storages />} />
