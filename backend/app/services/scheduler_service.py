@@ -32,6 +32,7 @@ class SchedulerService:
         """Start the scheduler and sync jobs from the database."""
         from app.config import settings
         tz = self._normalise_tz(settings.TIMEZONE)
+        settings.TIMEZONE = tz  # ensure downstream code (e.g. _parse_cron) sees the normalized value
         self._scheduler = BackgroundScheduler(timezone=tz)
         self._scheduler.start()
         self.sync_jobs()
@@ -197,7 +198,7 @@ class SchedulerService:
             day=day,
             month=month,
             day_of_week=day_of_week,
-            timezone=settings.TIMEZONE,
+            timezone=SchedulerService._normalise_tz(settings.TIMEZONE),
         )
 
 
