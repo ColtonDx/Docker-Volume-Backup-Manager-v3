@@ -29,7 +29,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 
 # Default settings values
 DEFAULTS: dict[str, Any] = {
-    "timezone": "utc",
+    "timezone": "UTC",
     "default_label_key": "dvbm.job",
     "rclone_enabled": False,
     "rclone_binary": "/usr/bin/rclone",

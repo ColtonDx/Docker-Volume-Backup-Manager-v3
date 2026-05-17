@@ -20,13 +20,22 @@ class SchedulerService:
     def __init__(self) -> None:
         self._scheduler: BackgroundScheduler | None = None
 
+    @staticmethod
+    def _normalise_tz(tz: str) -> str:
+        """APScheduler 3.11+ uses zoneinfo which requires exact IANA keys (case-sensitive)."""
+        stripped = tz.strip()
+        if stripped.upper() == "UTC":
+            return "UTC"
+        return stripped
+
     def start(self) -> None:
         """Start the scheduler and sync jobs from the database."""
         from app.config import settings
-        self._scheduler = BackgroundScheduler(timezone=settings.TIMEZONE)
+        tz = self._normalise_tz(settings.TIMEZONE)
+        self._scheduler = BackgroundScheduler(timezone=tz)
         self._scheduler.start()
         self.sync_jobs()
-        logger.info("Scheduler started with timezone '%s'", settings.TIMEZONE)
+        logger.info("Scheduler started with timezone '%s'", tz)
 
     def shutdown(self) -> None:
         if self._scheduler and self._scheduler.running:
@@ -36,6 +45,7 @@ class SchedulerService:
     def reconfigure_timezone(self, tz: str) -> None:
         """Restart the scheduler with a new timezone and re-sync all jobs."""
         from app.config import settings
+        tz = self._normalise_tz(tz)
         was_running = self._scheduler and self._scheduler.running
         if was_running:
             self._scheduler.shutdown(wait=False)

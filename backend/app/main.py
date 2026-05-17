@@ -72,7 +72,8 @@ def _configure_timezone_on_startup() -> None:
                 except (json.JSONDecodeError, TypeError):
                     tz = row.value
                 if isinstance(tz, str) and tz.strip():
-                    settings.TIMEZONE = tz.strip()
+                    from app.services.scheduler_service import scheduler_service
+                    settings.TIMEZONE = scheduler_service._normalise_tz(tz)
                     _log.info("Timezone loaded from DB: %s", settings.TIMEZONE)
         finally:
             db.close()
