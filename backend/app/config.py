@@ -39,7 +39,7 @@ class Settings:
     DOCKER_LABEL_KEY: str = os.getenv("DOCKER_LABEL_KEY", "dvbm.job")
 
     # Backup
-    BACKUP_TEMP_DIR: Path = Path(os.getenv("BACKUP_TEMP_DIR", "/tmp/dvbm"))
+    BACKUP_TEMP_DIR: Path = Path(os.getenv("BACKUP_TEMP_DIR", "/backups"))
     DEFAULT_COMPRESSION: str = os.getenv("DEFAULT_COMPRESSION", "gzip")
 
     # Rclone

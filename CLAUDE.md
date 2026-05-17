@@ -75,7 +75,7 @@ Schema migrations run automatically on backend startup via `database.py`.
 | `JWT_SECRET` | hardcoded default | JWT signing key |
 | `DOCKER_LABEL_KEY` | `"dvbm.job"` | Container label used to match backup jobs |
 | `DATA_DIR` | `/data` | SQLite DB location |
-| `BACKUP_TEMP_DIR` | `/tmp/dvbm` | Staging dir for archives |
+| `BACKUP_TEMP_DIR` | `/backups` | Staging dir for archives |
 | `RCLONE_BINARY` | `/usr/bin/rclone` | rclone executable |
 | `TZ` | `UTC` | Timezone for cron schedules |
 

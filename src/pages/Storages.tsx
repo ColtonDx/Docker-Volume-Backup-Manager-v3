@@ -33,7 +33,7 @@ const typeLabels: Record<string, string> = { localfs: "Local FS", s3: "S3", ftp:
 
 function primaryPath(s: StorageBackend): string {
   const c = s.config || {};
-  if (s.type === "localfs") return (c.path as string) || "/backups";
+  if (s.type === "localfs") return (c.path as string) || "/local-backups";
   if (s.type === "s3") return (c.bucket as string) || "";
   if (s.type === "ftp") return `${c.host || ""}:${c.port || 21}`;
   if (s.type === "rclone") return (c.remote_name as string) || "";
@@ -42,7 +42,7 @@ function primaryPath(s: StorageBackend): string {
 
 const defaultConfig = (type: string): StorageBackendConfig => {
   switch (type) {
-    case "localfs": return { path: "/backups" };
+    case "localfs": return { path: "/local-backups" };
     case "s3": return { bucket: "", region: "us-east-1", access_key_id: "", secret_access_key: "" };
     case "ftp": return { host: "", port: 21, username: "", password: "", use_tls: false, use_sftp: false };
     case "rclone": return { remote_name: "", flags: "" };
@@ -197,7 +197,7 @@ export default function Storages() {
                         <p className="text-xs text-muted-foreground">No remotes found. Paste your rclone config in Settings and save first.</p>
                       )}
                     </div>
-                    <div className="space-y-2"><Label>Remote Path</Label><Input className="bg-background border-border font-mono text-sm" placeholder="/backups" value={(form.config.path as string) || ""} onChange={(e) => setConfigField("path", e.target.value)} /></div>
+                    <div className="space-y-2"><Label>Remote Path</Label><Input className="bg-background border-border font-mono text-sm" placeholder="/local-backups" value={(form.config.path as string) || ""} onChange={(e) => setConfigField("path", e.target.value)} /></div>
                     <div className="space-y-2"><Label>Extra Flags</Label><Input className="bg-background border-border font-mono text-sm" placeholder="--transfers=4" value={(form.config.flags as string) || ""} onChange={(e) => setConfigField("flags", e.target.value)} /></div>
                   </>
                 )}

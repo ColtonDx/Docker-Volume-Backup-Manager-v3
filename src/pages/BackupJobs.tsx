@@ -38,6 +38,7 @@ export default function BackupJobs() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [editingJob, setEditingJob] = useState<BackupJob | null>(null);
   const [formData, setFormData] = useState({ name: "", label_key: "", label_value: "", storage_id: "", schedule_id: "", retention_id: "" });
+  const [submitted, setSubmitted] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -151,12 +152,14 @@ export default function BackupJobs() {
 
   const openCreate = () => {
     setEditingJob(null);
+    setSubmitted(false);
     setFormData({ name: "", label_key: defaultLabelKey, label_value: "", storage_id: "", schedule_id: "", retention_id: "" });
     setDialogOpen(true);
   };
 
   const openEdit = (job: BackupJob) => {
     setEditingJob(job);
+    setSubmitted(false);
     setFormData({
       name: job.name,
       label_key: job.label_key || defaultLabelKey,
@@ -169,10 +172,9 @@ export default function BackupJobs() {
   };
 
   const handleSave = () => {
-    if (!formData.name || !formData.storage_id) return;
-    // Prevent duplicate names (case-insensitive)
+    setSubmitted(true);
     const nameTaken = jobs.some((j) => j.name.toLowerCase() === formData.name.trim().toLowerCase() && j.id !== editingJob?.id);
-    if (nameTaken) return;
+    if (!formData.name.trim() || !formData.storage_id || nameTaken) return;
     if (editingJob) {
       updateMutation.mutate({ id: editingJob.id, data: formData });
     } else {
@@ -188,6 +190,8 @@ export default function BackupJobs() {
   };
 
   const isDuplicateName = formData.name.trim() !== "" && jobs.some((j) => j.name.toLowerCase() === formData.name.trim().toLowerCase() && j.id !== editingJob?.id);
+  const missingName = submitted && !formData.name.trim();
+  const missingStorage = submitted && !formData.storage_id;
 
   return (
     <div>
@@ -206,8 +210,15 @@ export default function BackupJobs() {
               </DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
-                  <Label htmlFor="job-name">Job Name</Label>
-                  <Input id="job-name" placeholder="e.g. postgres-nightly" className={`bg-background border-border ${isDuplicateName ? "border-destructive focus-visible:ring-destructive" : ""}`} value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+                  <Label htmlFor="job-name">Job Name <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="job-name"
+                    placeholder="e.g. postgres-nightly"
+                    className={`bg-background border-border ${(missingName || isDuplicateName) ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                    value={formData.name}
+                    onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                  />
+                  {missingName && <p className="text-xs text-destructive">Job name is required</p>}
                   {isDuplicateName && <p className="text-xs text-destructive">A job with this name already exists</p>}
                 </div>
                 <div className="space-y-2">
@@ -220,15 +231,24 @@ export default function BackupJobs() {
                   <p className="text-xs text-muted-foreground">Containers with label <code className="text-foreground">{formData.label_key || defaultLabelKey}={formData.label_value || formData.name || "value"}</code> will be matched. Leave value empty to use the job name.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Storage Backend</Label>
+                  <Label>Storage Backend <span className="text-destructive">*</span></Label>
                   <Select value={formData.storage_id} onValueChange={(v) => setFormData((p) => ({ ...p, storage_id: v }))}>
-                    <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select storage" /></SelectTrigger>
+                    <SelectTrigger className={`bg-background border-border ${missingStorage ? "border-destructive focus-visible:ring-destructive" : ""}`}>
+                      <SelectValue placeholder="Select storage" />
+                    </SelectTrigger>
                     <SelectContent portal={false} className="bg-popover border-border">
-                      {storages.map((s) => (
-                        <SelectItem key={s.id} value={s.id.toString()}>{s.name} ({s.type})</SelectItem>
-                      ))}
+                      {storages.length === 0
+                        ? <SelectItem value="__none__" disabled>No storage backends configured</SelectItem>
+                        : storages.map((s) => (
+                            <SelectItem key={s.id} value={s.id.toString()}>{s.name} ({s.type})</SelectItem>
+                          ))
+                      }
                     </SelectContent>
                   </Select>
+                  {missingStorage && <p className="text-xs text-destructive">A storage backend is required</p>}
+                  {storages.length === 0 && !missingStorage && (
+                    <p className="text-xs text-muted-foreground">No storage backends yet — add one in the <a href="/storages" className="underline text-foreground">Storages</a> page first</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Schedule</Label>
