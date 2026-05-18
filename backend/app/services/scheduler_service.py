@@ -32,6 +32,7 @@ class SchedulerService:
         """Start the scheduler and sync jobs from the database."""
         from app.config import settings
         tz = self._normalise_tz(settings.TIMEZONE)
+        settings.TIMEZONE = tz  # ensure downstream code (e.g. _parse_cron) sees the normalized value
         self._scheduler = BackgroundScheduler(timezone=tz)
         self._scheduler.start()
         self.sync_jobs()
@@ -124,7 +125,7 @@ class SchedulerService:
 
         # Read relevant settings
         def _get(key, default=None):
-            row = db.query(Setting).get(key)
+            row = db.get(Setting, key)
             if row is None:
                 return default
             try:
@@ -142,7 +143,7 @@ class SchedulerService:
                 logger.info("Config backup cron job removed")
             return
 
-        schedule = db.query(Schedule).get(int(schedule_id))
+        schedule = db.get(Schedule, int(schedule_id))
         if not schedule or not schedule.enabled or not schedule.cron:
             if self._scheduler.get_job(CONFIG_JOB_ID):  # type: ignore[union-attr]
                 self._scheduler.remove_job(CONFIG_JOB_ID)  # type: ignore[union-attr]
@@ -197,7 +198,7 @@ class SchedulerService:
             day=day,
             month=month,
             day_of_week=day_of_week,
-            timezone=settings.TIMEZONE,
+            timezone=SchedulerService._normalise_tz(settings.TIMEZONE),
         )
 
 

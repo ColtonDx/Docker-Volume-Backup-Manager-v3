@@ -335,12 +335,3 @@ class JobDetailStats(BaseModel):
     schedule_info: dict[str, Any] | None = None
 
 
-# ---- Docker Info ---------------------------------------------------------
-
-class ContainerInfo(BaseModel):
-    id: str
-    name: str
-    image: str
-    status: str
-    labels: dict[str, str] = {}
-    volumes: list[str] = []

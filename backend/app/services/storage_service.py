@@ -6,6 +6,7 @@ storage targets: local filesystem, S3, FTP/SFTP, and rclone remotes.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import shutil
@@ -57,51 +58,79 @@ class StorageService:
     # List files
     # ------------------------------------------------------------------
 
-    def list_files(self, backend_type: str, config: dict[str, Any], prefix: str = "") -> list[dict[str, Any]]:
-        """List files on the storage backend. Returns list of {name, size, path}."""
+    def list_files(
+        self,
+        backend_type: str,
+        config: dict[str, Any],
+        prefix: str = "",
+        suffix: str = ".tar.gz",
+    ) -> list[dict[str, Any]]:
+        """List files on the storage backend. Returns list of {name, size, path}.
+
+        suffix filters by file extension (default ".tar.gz"; pass ".zip" for config backups).
+        """
         handler = self._get_handler(backend_type)
         if "list" not in handler:
             raise NotImplementedError(f"list_files not supported for {backend_type}")
-        return handler["list"](config, prefix)
+        return handler["list"](config, prefix, suffix)
 
     # ------------------------------------------------------------------
-    # Handler registry
+    # Handler registry (built once as a class-level constant)
     # ------------------------------------------------------------------
 
     def _get_handler(self, backend_type: str) -> dict:
-        handlers = {
-            "localfs": {
-                "upload": self._localfs_upload,
-                "download": self._localfs_download,
-                "delete": self._localfs_delete,
-                "test": self._localfs_test,
-                "list": self._localfs_list,
-            },
-            "s3": {
-                "upload": self._s3_upload,
-                "download": self._s3_download,
-                "delete": self._s3_delete,
-                "test": self._s3_test,
-                "list": self._s3_list,
-            },
-            "ftp": {
-                "upload": self._ftp_upload,
-                "download": self._ftp_download,
-                "delete": self._ftp_delete,
-                "test": self._ftp_test,
-                "list": self._ftp_list,
-            },
-            "rclone": {
-                "upload": self._rclone_upload,
-                "download": self._rclone_download,
-                "delete": self._rclone_delete,
-                "test": self._rclone_test,
-                "list": self._rclone_list,
-            },
-        }
-        if backend_type not in handlers:
+        if backend_type not in _HANDLERS:
             raise ValueError(f"Unsupported storage backend type: {backend_type}")
-        return handlers[backend_type]
+        return _HANDLERS[backend_type]
+
+    # ==================================================================
+    # Connection helpers
+    # ==================================================================
+
+    @staticmethod
+    def _s3_client(config: dict):
+        """Return a boto3 S3 client configured from the storage backend config."""
+        import boto3
+        return boto3.client(
+            "s3",
+            region_name=config.get("region", "us-east-1"),
+            aws_access_key_id=config.get("access_key_id"),
+            aws_secret_access_key=config.get("secret_access_key"),
+            endpoint_url=config.get("endpoint_url") or None,
+        )
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _sftp_connect(config: dict):
+        """Context manager that yields a connected paramiko SFTPClient."""
+        import paramiko
+        transport = paramiko.Transport((config["host"], config.get("port", 22)))
+        transport.connect(username=config.get("username", ""), password=config.get("password", ""))
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        try:
+            yield sftp
+        finally:
+            sftp.close()
+            transport.close()
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _ftp_connect(config: dict):
+        """Context manager that yields a connected FTP/FTP_TLS client."""
+        from ftplib import FTP, FTP_TLS
+        ftp_class = FTP_TLS if config.get("use_tls", False) else FTP
+        ftp = ftp_class()
+        ftp.connect(config["host"], config.get("port", 21))
+        ftp.login(config.get("username", ""), config.get("password", ""))
+        if config.get("use_tls"):
+            ftp.prot_p()
+        try:
+            yield ftp
+        finally:
+            try:
+                ftp.quit()
+            except Exception:
+                pass
 
     # ==================================================================
     # Local FS
@@ -148,7 +177,7 @@ class StorageService:
             return False, str(exc)
 
     @staticmethod
-    def _localfs_list(config: dict, prefix: str = "") -> list[dict]:
+    def _localfs_list(config: dict, prefix: str = "", suffix: str = ".tar.gz") -> list[dict]:
         base = config.get("path", "/backups")
         results = []
         if not os.path.isdir(base):
@@ -159,7 +188,7 @@ class StorageService:
                 continue
             if prefix and not name.startswith(prefix):
                 continue
-            if not name.endswith(".tar.gz"):
+            if not name.endswith(suffix):
                 continue
             try:
                 size = os.path.getsize(full)
@@ -174,15 +203,7 @@ class StorageService:
 
     @staticmethod
     def _s3_upload(config: dict, local_path: str, remote_name: str) -> str:
-        import boto3
-
-        client = boto3.client(
-            "s3",
-            region_name=config.get("region", "us-east-1"),
-            aws_access_key_id=config.get("access_key_id"),
-            aws_secret_access_key=config.get("secret_access_key"),
-            endpoint_url=config.get("endpoint_url") or None,
-        )
+        client = StorageService._s3_client(config)
         bucket = config["bucket"]
         key = f"{config.get('prefix', '').strip('/')}/{remote_name}".lstrip("/")
         client.upload_file(local_path, bucket, key)
@@ -191,33 +212,16 @@ class StorageService:
 
     @staticmethod
     def _s3_download(config: dict, remote_path: str, local_path: str) -> str:
-        import boto3
-
-        client = boto3.client(
-            "s3",
-            region_name=config.get("region", "us-east-1"),
-            aws_access_key_id=config.get("access_key_id"),
-            aws_secret_access_key=config.get("secret_access_key"),
-            endpoint_url=config.get("endpoint_url") or None,
-        )
+        client = StorageService._s3_client(config)
         bucket = config["bucket"]
-        # remote_path is "s3://bucket/key" or just "key"
         key = remote_path.replace(f"s3://{bucket}/", "")
         client.download_file(bucket, key, local_path)
         return local_path
 
     @staticmethod
     def _s3_delete(config: dict, remote_path: str) -> bool:
-        import boto3
-
         try:
-            client = boto3.client(
-                "s3",
-                region_name=config.get("region", "us-east-1"),
-                aws_access_key_id=config.get("access_key_id"),
-                aws_secret_access_key=config.get("secret_access_key"),
-                endpoint_url=config.get("endpoint_url") or None,
-            )
+            client = StorageService._s3_client(config)
             bucket = config["bucket"]
             key = remote_path.replace(f"s3://{bucket}/", "")
             client.delete_object(Bucket=bucket, Key=key)
@@ -228,15 +232,7 @@ class StorageService:
     @staticmethod
     def _s3_test(config: dict) -> tuple[bool, str]:
         try:
-            import boto3
-
-            client = boto3.client(
-                "s3",
-                region_name=config.get("region", "us-east-1"),
-                aws_access_key_id=config.get("access_key_id"),
-                aws_secret_access_key=config.get("secret_access_key"),
-                endpoint_url=config.get("endpoint_url") or None,
-            )
+            client = StorageService._s3_client(config)
             bucket = config.get("bucket", "")
             client.head_bucket(Bucket=bucket)
             return True, f"S3 bucket '{bucket}' is accessible"
@@ -244,16 +240,8 @@ class StorageService:
             return False, str(exc)
 
     @staticmethod
-    def _s3_list(config: dict, prefix: str = "") -> list[dict]:
-        import boto3
-
-        client = boto3.client(
-            "s3",
-            region_name=config.get("region", "us-east-1"),
-            aws_access_key_id=config.get("access_key_id"),
-            aws_secret_access_key=config.get("secret_access_key"),
-            endpoint_url=config.get("endpoint_url") or None,
-        )
+    def _s3_list(config: dict, prefix: str = "", suffix: str = ".tar.gz") -> list[dict]:
+        client = StorageService._s3_client(config)
         bucket = config["bucket"]
         s3_prefix = config.get("prefix", "").strip("/")
         if prefix:
@@ -264,7 +252,7 @@ class StorageService:
             for obj in page.get("Contents", []):
                 key = obj["Key"]
                 name = key.rsplit("/", 1)[-1]
-                if not name.endswith(".tar.gz"):
+                if not name.endswith(suffix):
                     continue
                 results.append({
                     "name": name,
@@ -284,35 +272,21 @@ class StorageService:
         remote_full = f"{remote_dir}/{remote_name}"
 
         if use_sftp:
-            import paramiko
-
-            transport = paramiko.Transport((config["host"], config.get("port", 22)))
-            transport.connect(username=config.get("username", ""), password=config.get("password", ""))
-            sftp = paramiko.SFTPClient.from_transport(transport)
-            try:
-                sftp.stat(remote_dir)
-            except FileNotFoundError:
-                sftp.mkdir(remote_dir)
-            sftp.put(local_path, remote_full)
-            sftp.close()
-            transport.close()
+            with StorageService._sftp_connect(config) as sftp:
+                try:
+                    sftp.stat(remote_dir)
+                except FileNotFoundError:
+                    sftp.mkdir(remote_dir)
+                sftp.put(local_path, remote_full)
         else:
-            from ftplib import FTP, FTP_TLS
-
-            ftp_class = FTP_TLS if config.get("use_tls", False) else FTP
-            ftp = ftp_class()
-            ftp.connect(config["host"], config.get("port", 21))
-            ftp.login(config.get("username", ""), config.get("password", ""))
-            if config.get("use_tls"):
-                ftp.prot_p()
-            try:
-                ftp.cwd(remote_dir)
-            except Exception:
-                ftp.mkd(remote_dir)
-                ftp.cwd(remote_dir)
-            with open(local_path, "rb") as f:
-                ftp.storbinary(f"STOR {remote_name}", f)
-            ftp.quit()
+            with StorageService._ftp_connect(config) as ftp:
+                try:
+                    ftp.cwd(remote_dir)
+                except Exception:
+                    ftp.mkd(remote_dir)
+                    ftp.cwd(remote_dir)
+                with open(local_path, "rb") as f:
+                    ftp.storbinary(f"STOR {remote_name}", f)
 
         logger.info("FTP: uploaded %s -> %s", local_path, remote_full)
         return remote_full
@@ -322,26 +296,12 @@ class StorageService:
         use_sftp = config.get("use_sftp", False)
 
         if use_sftp:
-            import paramiko
-
-            transport = paramiko.Transport((config["host"], config.get("port", 22)))
-            transport.connect(username=config.get("username", ""), password=config.get("password", ""))
-            sftp = paramiko.SFTPClient.from_transport(transport)
-            sftp.get(remote_path, local_path)
-            sftp.close()
-            transport.close()
+            with StorageService._sftp_connect(config) as sftp:
+                sftp.get(remote_path, local_path)
         else:
-            from ftplib import FTP, FTP_TLS
-
-            ftp_class = FTP_TLS if config.get("use_tls", False) else FTP
-            ftp = ftp_class()
-            ftp.connect(config["host"], config.get("port", 21))
-            ftp.login(config.get("username", ""), config.get("password", ""))
-            if config.get("use_tls"):
-                ftp.prot_p()
-            with open(local_path, "wb") as f:
-                ftp.retrbinary(f"RETR {remote_path}", f.write)
-            ftp.quit()
+            with StorageService._ftp_connect(config) as ftp:
+                with open(local_path, "wb") as f:
+                    ftp.retrbinary(f"RETR {remote_path}", f.write)
 
         return local_path
 
@@ -350,23 +310,11 @@ class StorageService:
         try:
             use_sftp = config.get("use_sftp", False)
             if use_sftp:
-                import paramiko
-
-                transport = paramiko.Transport((config["host"], config.get("port", 22)))
-                transport.connect(username=config.get("username", ""), password=config.get("password", ""))
-                sftp = paramiko.SFTPClient.from_transport(transport)
-                sftp.remove(remote_path)
-                sftp.close()
-                transport.close()
+                with StorageService._sftp_connect(config) as sftp:
+                    sftp.remove(remote_path)
             else:
-                from ftplib import FTP, FTP_TLS
-
-                ftp_class = FTP_TLS if config.get("use_tls", False) else FTP
-                ftp = ftp_class()
-                ftp.connect(config["host"], config.get("port", 21))
-                ftp.login(config.get("username", ""), config.get("password", ""))
-                ftp.delete(remote_path)
-                ftp.quit()
+                with StorageService._ftp_connect(config) as ftp:
+                    ftp.delete(remote_path)
             return True
         except Exception:
             return False
@@ -376,43 +324,26 @@ class StorageService:
         try:
             use_sftp = config.get("use_sftp", False)
             if use_sftp:
-                import paramiko
-
-                transport = paramiko.Transport((config["host"], config.get("port", 22)))
-                transport.connect(username=config.get("username", ""), password=config.get("password", ""))
-                sftp = paramiko.SFTPClient.from_transport(transport)
-                sftp.listdir(".")
-                sftp.close()
-                transport.close()
+                with StorageService._sftp_connect(config) as sftp:
+                    sftp.listdir(".")
                 return True, f"SFTP connection to {config['host']} successful"
             else:
-                from ftplib import FTP, FTP_TLS
-
-                ftp_class = FTP_TLS if config.get("use_tls", False) else FTP
-                ftp = ftp_class()
-                ftp.connect(config["host"], config.get("port", 21))
-                ftp.login(config.get("username", ""), config.get("password", ""))
-                ftp.nlst()
-                ftp.quit()
+                with StorageService._ftp_connect(config) as ftp:
+                    ftp.nlst()
                 return True, f"FTP connection to {config['host']} successful"
         except Exception as exc:
             return False, str(exc)
 
     @staticmethod
-    def _ftp_list(config: dict, prefix: str = "") -> list[dict]:
+    def _ftp_list(config: dict, prefix: str = "", suffix: str = ".tar.gz") -> list[dict]:
         use_sftp = config.get("use_sftp", False)
         remote_dir = config.get("path", "/backups")
         results = []
 
         if use_sftp:
-            import paramiko
-
-            transport = paramiko.Transport((config["host"], config.get("port", 22)))
-            transport.connect(username=config.get("username", ""), password=config.get("password", ""))
-            sftp = paramiko.SFTPClient.from_transport(transport)
-            try:
+            with StorageService._sftp_connect(config) as sftp:
                 for attr in sftp.listdir_attr(remote_dir):
-                    if not attr.filename.endswith(".tar.gz"):
+                    if not attr.filename.endswith(suffix):
                         continue
                     if prefix and not attr.filename.startswith(prefix):
                         continue
@@ -421,19 +352,8 @@ class StorageService:
                         "size": attr.st_size or 0,
                         "path": f"{remote_dir}/{attr.filename}",
                     })
-            finally:
-                sftp.close()
-                transport.close()
         else:
-            from ftplib import FTP, FTP_TLS
-
-            ftp_class = FTP_TLS if config.get("use_tls", False) else FTP
-            ftp = ftp_class()
-            ftp.connect(config["host"], config.get("port", 21))
-            ftp.login(config.get("username", ""), config.get("password", ""))
-            if config.get("use_tls"):
-                ftp.prot_p()
-            try:
+            with StorageService._ftp_connect(config) as ftp:
                 entries = []
                 ftp.retrlines(f"LIST {remote_dir}", entries.append)
                 for entry in entries:
@@ -441,7 +361,7 @@ class StorageService:
                     if len(parts) < 9:
                         continue
                     name = parts[8]
-                    if not name.endswith(".tar.gz"):
+                    if not name.endswith(suffix):
                         continue
                     if prefix and not name.startswith(prefix):
                         continue
@@ -454,8 +374,6 @@ class StorageService:
                         "size": size,
                         "path": f"{remote_dir}/{name}",
                     })
-            finally:
-                ftp.quit()
 
         return results
 
@@ -522,7 +440,9 @@ class StorageService:
             return False, str(exc)
 
     @staticmethod
-    def _rclone_list(config: dict, prefix: str = "") -> list[dict]:
+    def _rclone_list(config: dict, prefix: str = "", suffix: str = ".tar.gz") -> list[dict]:
+        import json as _json
+
         from app.config import settings
 
         remote = config.get("remote_name", "")
@@ -540,14 +460,13 @@ class StorageService:
         if result.returncode != 0:
             raise RuntimeError(f"rclone lsjson failed: {result.stderr}")
 
-        import json as _json
         items = _json.loads(result.stdout)
         results = []
         for item in items:
             if item.get("IsDir"):
                 continue
             name = item.get("Name", "")
-            if not name.endswith(".tar.gz"):
+            if not name.endswith(suffix):
                 continue
             if prefix and not name.startswith(prefix):
                 continue
@@ -559,5 +478,37 @@ class StorageService:
             })
         return results
 
+
+# Handler registry — built once at module load time (all methods are static).
+_HANDLERS: dict[str, dict] = {
+    "localfs": {
+        "upload": StorageService._localfs_upload,
+        "download": StorageService._localfs_download,
+        "delete": StorageService._localfs_delete,
+        "test": StorageService._localfs_test,
+        "list": StorageService._localfs_list,
+    },
+    "s3": {
+        "upload": StorageService._s3_upload,
+        "download": StorageService._s3_download,
+        "delete": StorageService._s3_delete,
+        "test": StorageService._s3_test,
+        "list": StorageService._s3_list,
+    },
+    "ftp": {
+        "upload": StorageService._ftp_upload,
+        "download": StorageService._ftp_download,
+        "delete": StorageService._ftp_delete,
+        "test": StorageService._ftp_test,
+        "list": StorageService._ftp_list,
+    },
+    "rclone": {
+        "upload": StorageService._rclone_upload,
+        "download": StorageService._rclone_download,
+        "delete": StorageService._rclone_delete,
+        "test": StorageService._rclone_test,
+        "list": StorageService._rclone_list,
+    },
+}
 
 storage_service = StorageService()

@@ -131,7 +131,7 @@ def list_jobs(db: Session = Depends(get_db)):
 
 @router.get("/{job_id}", response_model=BackupJobOut)
 def get_job(job_id: int, db: Session = Depends(get_db)):
-    job = db.query(BackupJob).get(job_id)
+    job = db.get(BackupJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return _enrich_job(job, db)
@@ -158,7 +158,7 @@ def create_job(body: BackupJobCreate, db: Session = Depends(get_db)):
 
 @router.put("/{job_id}", response_model=BackupJobOut)
 def update_job(job_id: int, body: BackupJobUpdate, db: Session = Depends(get_db)):
-    job = db.query(BackupJob).get(job_id)
+    job = db.get(BackupJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -171,7 +171,7 @@ def update_job(job_id: int, body: BackupJobUpdate, db: Session = Depends(get_db)
 
 @router.delete("/{job_id}", status_code=204)
 def delete_job(job_id: int, db: Session = Depends(get_db)):
-    job = db.query(BackupJob).get(job_id)
+    job = db.get(BackupJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     db.delete(job)
@@ -182,7 +182,7 @@ def delete_job(job_id: int, db: Session = Depends(get_db)):
 @router.post("/{job_id}/run")
 def run_job_now(job_id: int, db: Session = Depends(get_db)):
     """Manually trigger a backup job."""
-    job = db.query(BackupJob).get(job_id)
+    job = db.get(BackupJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     backup_service.run_backup(job_id)
@@ -191,7 +191,7 @@ def run_job_now(job_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{job_id}/pause")
 def pause_job(job_id: int, db: Session = Depends(get_db)):
-    job = db.query(BackupJob).get(job_id)
+    job = db.get(BackupJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     job.enabled = False
@@ -202,7 +202,7 @@ def pause_job(job_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{job_id}/resume")
 def resume_job(job_id: int, db: Session = Depends(get_db)):
-    job = db.query(BackupJob).get(job_id)
+    job = db.get(BackupJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     job.enabled = True
@@ -214,7 +214,7 @@ def resume_job(job_id: int, db: Session = Depends(get_db)):
 @router.get("/{job_id}/stats", response_model=JobDetailStats)
 def get_job_stats(job_id: int, db: Session = Depends(get_db)):
     """Per-job dashboard stats: success rate, backup history, schedule, logs."""
-    job = db.query(BackupJob).get(job_id)
+    job = db.get(BackupJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 

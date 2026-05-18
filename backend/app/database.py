@@ -236,12 +236,60 @@ def _m002_add_indexes(conn) -> None:
     conn.commit()
 
 
+def _m004_normalize_timezone(conn) -> None:
+    """Normalize the stored timezone setting to a valid IANA key.
+
+    Older versions shipped with the default timezone set to "utc" (lowercase),
+    which zoneinfo (used by APScheduler 3.11+) rejects. This migration corrects
+    any stored value that zoneinfo cannot load.
+    """
+    import json as _json
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    row = conn.execute(text("SELECT value FROM settings WHERE key = 'timezone'")).fetchone()
+    if not row:
+        return
+
+    try:
+        tz = _json.loads(row[0])
+    except Exception:
+        tz = row[0]
+
+    if not isinstance(tz, str) or not tz.strip():
+        return
+
+    tz = tz.strip()
+
+    # Already valid — nothing to do.
+    try:
+        ZoneInfo(tz)
+        return
+    except (ZoneInfoNotFoundError, KeyError):
+        pass
+
+    # Try uppercase — fixes "utc" -> "UTC" and similar.
+    normalized = tz.upper()
+    try:
+        ZoneInfo(normalized)
+    except (ZoneInfoNotFoundError, KeyError):
+        # Cannot determine the correct timezone; fall back to UTC.
+        normalized = "UTC"
+
+    conn.execute(
+        text("UPDATE settings SET value = :v WHERE key = 'timezone'"),
+        {"v": _json.dumps(normalized)},
+    )
+    conn.commit()
+    log.info("Migration 4: normalized stored timezone %r -> %r", tz, normalized)
+
+
 # Registry: (version, description, function)
 # APPEND ONLY — never edit or remove existing rows.
 MIGRATIONS: list[tuple[int, str, object]] = [
     (1, "add label_key and label_value to backup_jobs", _m001_add_label_columns),
     (2, "add indexes on backup_records and log_entries", _m002_add_indexes),
     (3, "add timeout_seconds to backup_jobs", _m003_add_job_timeout),
+    (4, "normalize stored timezone to valid IANA key", _m004_normalize_timezone),
 ]
 
 
