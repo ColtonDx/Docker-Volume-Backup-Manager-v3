@@ -23,7 +23,7 @@ def list_notifications(db: Session = Depends(get_db)):
 
 @router.get("/{channel_id}", response_model=NotificationChannelOut)
 def get_notification(channel_id: int, db: Session = Depends(get_db)):
-    channel = db.query(NotificationChannel).get(channel_id)
+    channel = db.get(NotificationChannel, channel_id)
     if not channel:
         raise HTTPException(status_code=404, detail="Notification channel not found")
     return channel
@@ -48,7 +48,7 @@ def create_notification(body: NotificationChannelCreate, db: Session = Depends(g
 def update_notification(
     channel_id: int, body: NotificationChannelUpdate, db: Session = Depends(get_db)
 ):
-    channel = db.query(NotificationChannel).get(channel_id)
+    channel = db.get(NotificationChannel, channel_id)
     if not channel:
         raise HTTPException(status_code=404, detail="Notification channel not found")
     if body.name is not None:
@@ -68,7 +68,7 @@ def update_notification(
 
 @router.delete("/{channel_id}", status_code=204)
 def delete_notification(channel_id: int, db: Session = Depends(get_db)):
-    channel = db.query(NotificationChannel).get(channel_id)
+    channel = db.get(NotificationChannel, channel_id)
     if not channel:
         raise HTTPException(status_code=404, detail="Notification channel not found")
     db.delete(channel)
@@ -78,7 +78,7 @@ def delete_notification(channel_id: int, db: Session = Depends(get_db)):
 @router.post("/{channel_id}/test")
 def test_notification(channel_id: int, db: Session = Depends(get_db)):
     """Send a test notification."""
-    channel = db.query(NotificationChannel).get(channel_id)
+    channel = db.get(NotificationChannel, channel_id)
     if not channel:
         raise HTTPException(status_code=404, detail="Notification channel not found")
 

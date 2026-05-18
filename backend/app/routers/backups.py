@@ -1,3 +1,6 @@
+import json
+import re
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -5,8 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import BackupJob, BackupRecord
+from app.models import BackupJob, BackupRecord, LogEntry
 from app.schemas import BackupRecordOut
+from app.services.backup_service import backup_service
+from app.services.storage_service import storage_service
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -29,7 +34,7 @@ def list_backups(
 
 @router.get("/{backup_id}", response_model=BackupRecordOut)
 def get_backup(backup_id: int, db: Session = Depends(get_db)):
-    record = db.query(BackupRecord).get(backup_id)
+    record = db.get(BackupRecord, backup_id)
     if not record:
         raise HTTPException(status_code=404, detail="Backup record not found")
     return record
@@ -38,7 +43,7 @@ def get_backup(backup_id: int, db: Session = Depends(get_db)):
 @router.post("/{backup_id}/restore")
 def restore_backup(backup_id: int, db: Session = Depends(get_db)):
     """Restore volumes from a backup record."""
-    record = db.query(BackupRecord).get(backup_id)
+    record = db.get(BackupRecord, backup_id)
     if not record:
         raise HTTPException(status_code=404, detail="Backup record not found")
     if record.status != "success":
@@ -47,16 +52,13 @@ def restore_backup(backup_id: int, db: Session = Depends(get_db)):
             detail="Can only restore from successful backups",
         )
 
-    from app.services.backup_service import backup_service
     backup_service.restore_backup(backup_id)
     return {"message": f"Restore initiated from backup #{backup_id}"}
 
 
 @router.delete("/{backup_id}", status_code=204)
 def delete_backup(backup_id: int, db: Session = Depends(get_db)):
-    import json
-
-    record = db.query(BackupRecord).get(backup_id)
+    record = db.get(BackupRecord, backup_id)
     if not record:
         raise HTTPException(status_code=404, detail="Backup record not found")
 
@@ -66,7 +68,6 @@ def delete_backup(backup_id: int, db: Session = Depends(get_db)):
         job = record.job  # lazy-joined relationship
         if job and job.storage:
             config = json.loads(job.storage.config_json or "{}")
-            from app.services.storage_service import storage_service
             try:
                 storage_service.delete_remote(job.storage.type, config, record.storage_path)
             except Exception as exc:
@@ -82,11 +83,7 @@ def delete_backup(backup_id: int, db: Session = Depends(get_db)):
 @router.post("/import")
 def import_backups(job_id: int = Query(...), db: Session = Depends(get_db)):
     """Scan a job's storage backend for existing backup archives and import them as records."""
-    import json
-    import re
-    from datetime import datetime, timezone
-
-    job = db.query(BackupJob).get(job_id)
+    job = db.get(BackupJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Backup job not found")
 
@@ -95,7 +92,6 @@ def import_backups(job_id: int = Query(...), db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Job has no storage backend configured")
 
     config = json.loads(storage.config_json or "{}")
-    from app.services.storage_service import storage_service
 
     try:
         files = storage_service.list_files(storage.type, config, prefix=f"{job.name}_")
@@ -152,8 +148,6 @@ def import_backups(job_id: int = Query(...), db: Session = Depends(get_db)):
     if imported > 0:
         db.commit()
 
-    # Log the import operation
-    from app.models import LogEntry
     level = "success" if imported > 0 else "info"
     log_msg = f"Import scan: {imported} backup(s) imported, {skipped} skipped, {len(files)} found on storage"
     db.add(LogEntry(level=level, job_name=job.name, message=log_msg))

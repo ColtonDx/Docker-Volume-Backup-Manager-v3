@@ -125,7 +125,7 @@ class SchedulerService:
 
         # Read relevant settings
         def _get(key, default=None):
-            row = db.query(Setting).get(key)
+            row = db.get(Setting, key)
             if row is None:
                 return default
             try:
@@ -143,7 +143,7 @@ class SchedulerService:
                 logger.info("Config backup cron job removed")
             return
 
-        schedule = db.query(Schedule).get(int(schedule_id))
+        schedule = db.get(Schedule, int(schedule_id))
         if not schedule or not schedule.enabled or not schedule.cron:
             if self._scheduler.get_job(CONFIG_JOB_ID):  # type: ignore[union-attr]
                 self._scheduler.remove_job(CONFIG_JOB_ID)  # type: ignore[union-attr]

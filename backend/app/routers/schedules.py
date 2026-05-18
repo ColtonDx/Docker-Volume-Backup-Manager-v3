@@ -34,7 +34,7 @@ def list_schedules(db: Session = Depends(get_db)):
 
 @router.get("/{schedule_id}", response_model=ScheduleOut)
 def get_schedule(schedule_id: int, db: Session = Depends(get_db)):
-    schedule = db.query(Schedule).get(schedule_id)
+    schedule = db.get(Schedule, schedule_id)
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return _to_out(schedule, db)
@@ -52,7 +52,7 @@ def create_schedule(body: ScheduleCreate, db: Session = Depends(get_db)):
 
 @router.put("/{schedule_id}", response_model=ScheduleOut)
 def update_schedule(schedule_id: int, body: ScheduleUpdate, db: Session = Depends(get_db)):
-    schedule = db.query(Schedule).get(schedule_id)
+    schedule = db.get(Schedule, schedule_id)
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -65,7 +65,7 @@ def update_schedule(schedule_id: int, body: ScheduleUpdate, db: Session = Depend
 
 @router.delete("/{schedule_id}", status_code=204)
 def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
-    schedule = db.query(Schedule).get(schedule_id)
+    schedule = db.get(Schedule, schedule_id)
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
     # Detach linked jobs so they revert to manual-only

@@ -42,7 +42,7 @@ def _configure_syslog_on_startup() -> None:
                            "syslog_protocol", "syslog_facility")
             syslog_settings: dict = {}
             for key in syslog_keys:
-                row = db.query(Setting).get(key)
+                row = db.get(Setting, key)
                 if row and row.value is not None:
                     try:
                         syslog_settings[key] = json.loads(row.value)
@@ -65,7 +65,7 @@ def _configure_timezone_on_startup() -> None:
         from app.models import Setting
         db = SessionLocal()
         try:
-            row = db.query(Setting).get("timezone")
+            row = db.get(Setting, "timezone")
             if row and row.value:
                 try:
                     tz = json.loads(row.value)
@@ -92,7 +92,7 @@ def _sync_rclone_config_on_startup() -> None:
         try:
             config_text = None
             for key in ("rclone_config_inline", "rclone_config_text"):
-                row = db.query(Setting).get(key)
+                row = db.get(Setting, key)
                 if row and row.value:
                     val = json.loads(row.value) if row.value.startswith('"') else row.value
                     if isinstance(val, str) and val.strip():

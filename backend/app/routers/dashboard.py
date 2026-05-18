@@ -20,7 +20,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     storage_count = db.query(StorageBackend).count()
 
     # Success rate over last 30 days — computed in SQL, no Python loop
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
     rate_row = (
         db.query(
             func.count().label("total"),
@@ -34,7 +34,7 @@ def get_dashboard(db: Session = Depends(get_db)):
     success_rate = (success_recent / total_recent * 100) if total_recent > 0 else -1.0
 
     # Active alerts: count of error records in last 24h
-    one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+    one_day_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
     active_alerts = (
         db.query(BackupRecord)
         .filter(

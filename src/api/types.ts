@@ -230,16 +230,6 @@ export interface DashboardStats {
   }>;
 }
 
-// Docker
-export interface ContainerInfo {
-  id: string;
-  name: string;
-  image: string;
-  status: string;
-  labels: Record<string, string>;
-  volumes: string[];
-}
-
 // Generic message response
 export interface MessageResponse {
   message: string;

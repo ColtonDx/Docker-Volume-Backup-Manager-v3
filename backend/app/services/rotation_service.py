@@ -26,7 +26,7 @@ class RotationService:
         removed = 0
 
         try:
-            policy = db.query(RetentionPolicy).get(policy_id)
+            policy = db.get(RetentionPolicy, policy_id)
             if not policy:
                 return 0
 

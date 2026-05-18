@@ -42,7 +42,7 @@ def list_rclone_remotes():
 
 @router.get("/{storage_id}", response_model=StorageBackendOut)
 def get_storage(storage_id: int, db: Session = Depends(get_db)):
-    storage = db.query(StorageBackend).get(storage_id)
+    storage = db.get(StorageBackend, storage_id)
     if not storage:
         raise HTTPException(status_code=404, detail="Storage backend not found")
     return storage
@@ -66,7 +66,7 @@ def create_storage(body: StorageBackendCreate, db: Session = Depends(get_db)):
 
 @router.put("/{storage_id}", response_model=StorageBackendOut)
 def update_storage(storage_id: int, body: StorageBackendUpdate, db: Session = Depends(get_db)):
-    storage = db.query(StorageBackend).get(storage_id)
+    storage = db.get(StorageBackend, storage_id)
     if not storage:
         raise HTTPException(status_code=404, detail="Storage backend not found")
     if body.name is not None:
@@ -88,7 +88,7 @@ def update_storage(storage_id: int, body: StorageBackendUpdate, db: Session = De
 
 @router.delete("/{storage_id}", status_code=204)
 def delete_storage(storage_id: int, db: Session = Depends(get_db)):
-    storage = db.query(StorageBackend).get(storage_id)
+    storage = db.get(StorageBackend, storage_id)
     if not storage:
         raise HTTPException(status_code=404, detail="Storage backend not found")
     db.delete(storage)
@@ -98,7 +98,7 @@ def delete_storage(storage_id: int, db: Session = Depends(get_db)):
 @router.post("/{storage_id}/test")
 def test_storage_connection(storage_id: int, db: Session = Depends(get_db)):
     """Test connectivity to the storage backend."""
-    storage = db.query(StorageBackend).get(storage_id)
+    storage = db.get(StorageBackend, storage_id)
     if not storage:
         raise HTTPException(status_code=404, detail="Storage backend not found")
 

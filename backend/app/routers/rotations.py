@@ -34,7 +34,7 @@ def list_retention_policies(db: Session = Depends(get_db)):
 
 @router.get("/{policy_id}", response_model=RetentionPolicyOut)
 def get_retention_policy(policy_id: int, db: Session = Depends(get_db)):
-    policy = db.query(RetentionPolicy).get(policy_id)
+    policy = db.get(RetentionPolicy, policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="Retention policy not found")
     return _to_out(policy, db)
@@ -53,7 +53,7 @@ def create_retention_policy(body: RetentionPolicyCreate, db: Session = Depends(g
 def update_retention_policy(
     policy_id: int, body: RetentionPolicyUpdate, db: Session = Depends(get_db)
 ):
-    policy = db.query(RetentionPolicy).get(policy_id)
+    policy = db.get(RetentionPolicy, policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="Retention policy not found")
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -65,7 +65,7 @@ def update_retention_policy(
 
 @router.delete("/{policy_id}", status_code=204)
 def delete_retention_policy(policy_id: int, db: Session = Depends(get_db)):
-    policy = db.query(RetentionPolicy).get(policy_id)
+    policy = db.get(RetentionPolicy, policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="Retention policy not found")
     db.delete(policy)
@@ -75,7 +75,7 @@ def delete_retention_policy(policy_id: int, db: Session = Depends(get_db)):
 @router.post("/{policy_id}/run")
 def run_cleanup(policy_id: int, db: Session = Depends(get_db)):
     """Manually trigger retention cleanup for a policy."""
-    policy = db.query(RetentionPolicy).get(policy_id)
+    policy = db.get(RetentionPolicy, policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="Retention policy not found")
 

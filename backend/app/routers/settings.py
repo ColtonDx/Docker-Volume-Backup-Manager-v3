@@ -75,7 +75,7 @@ def get_settings(db: Session = Depends(get_db)):
 @router.put("")
 def update_settings(bundle: SettingsBundle, db: Session = Depends(get_db)):
     for key, value in bundle.settings.items():
-        existing = db.query(Setting).get(key)
+        existing = db.get(Setting, key)
         serialized = json.dumps(value)
         if existing:
             existing.value = serialized
@@ -147,79 +147,14 @@ def run_config_backup_now():
 @router.get("/export")
 def export_config(db: Session = Depends(get_db)):
     """Export all configuration as a downloadable .zip containing JSON files."""
+    from app.config_export import build_config_zip
 
-    def _rows_to_dicts(rows, columns):
-        out = []
-        for r in rows:
-            d = {}
-            for c in columns:
-                val = getattr(r, c, None)
-                if isinstance(val, datetime):
-                    val = val.isoformat()
-                d[c] = val
-            out.append(d)
-        return out
-
-    # Collect all config tables
-    settings_rows = db.query(Setting).all()
-    settings_dict = {}
-    for row in settings_rows:
-        try:
-            settings_dict[row.key] = json.loads(row.value) if row.value is not None else None
-        except (json.JSONDecodeError, TypeError):
-            settings_dict[row.key] = row.value
-
-    storages = _rows_to_dicts(
-        db.query(StorageBackend).all(),
-        ["id", "name", "type", "config_json", "created_at", "updated_at"],
-    )
-
-    schedules = _rows_to_dicts(
-        db.query(Schedule).all(),
-        ["id", "name", "cron", "description", "enabled", "created_at", "updated_at"],
-    )
-
-    retention_policies = _rows_to_dicts(
-        db.query(RetentionPolicy).all(),
-        ["id", "name", "description", "retention_days", "min_backups", "max_backups", "created_at", "updated_at"],
-    )
-
-    jobs = _rows_to_dicts(
-        db.query(BackupJob).all(),
-        ["id", "name", "label_key", "label_value", "storage_id", "schedule_id", "retention_id", "enabled", "created_at", "updated_at"],
-    )
-
-    notifications = _rows_to_dicts(
-        db.query(NotificationChannel).all(),
-        ["id", "name", "type", "config_json", "events_json", "enabled", "created_at", "updated_at"],
-    )
-
-    # Build zip in memory
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("settings.json", json.dumps(settings_dict, indent=2))
-        zf.writestr("storage_backends.json", json.dumps(storages, indent=2))
-        zf.writestr("schedules.json", json.dumps(schedules, indent=2))
-        zf.writestr("retention_policies.json", json.dumps(retention_policies, indent=2))
-        zf.writestr("backup_jobs.json", json.dumps(jobs, indent=2))
-        zf.writestr("notification_channels.json", json.dumps(notifications, indent=2))
-        zf.writestr(
-            "metadata.json",
-            json.dumps(
-                {
-                    "app_version": app_settings.APP_VERSION,
-                    "exported_at": datetime.now(timezone.utc).isoformat(),
-                },
-                indent=2,
-            ),
-        )
-    buf.seek(0)
-
+    zip_bytes = build_config_zip(db)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"dvbm_config_{timestamp}.zip"
 
     return StreamingResponse(
-        buf,
+        io.BytesIO(zip_bytes),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
@@ -258,7 +193,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
     settings_dict = _read_json("settings.json")
     if settings_dict and isinstance(settings_dict, dict):
         for key, value in settings_dict.items():
-            existing = db.query(Setting).get(key)
+            existing = db.get(Setting, key)
             serialized = json.dumps(value)
             if existing:
                 existing.value = serialized
@@ -270,7 +205,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
     storages_list = _read_json("storage_backends.json")
     if storages_list and isinstance(storages_list, list):
         for item in storages_list:
-            row = db.query(StorageBackend).get(item["id"])
+            row = db.get(StorageBackend, item["id"])
             if row:
                 row.name = item["name"]
                 row.type = item["type"]
@@ -286,7 +221,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
     schedules_list = _read_json("schedules.json")
     if schedules_list and isinstance(schedules_list, list):
         for item in schedules_list:
-            row = db.query(Schedule).get(item["id"])
+            row = db.get(Schedule, item["id"])
             if row:
                 row.name = item["name"]
                 row.cron = item["cron"]
@@ -304,7 +239,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
     retention_list = _read_json("retention_policies.json")
     if retention_list and isinstance(retention_list, list):
         for item in retention_list:
-            row = db.query(RetentionPolicy).get(item["id"])
+            row = db.get(RetentionPolicy, item["id"])
             if row:
                 row.name = item["name"]
                 row.description = item.get("description")
@@ -328,7 +263,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
     notif_list = _read_json("notification_channels.json")
     if notif_list and isinstance(notif_list, list):
         for item in notif_list:
-            row = db.query(NotificationChannel).get(item["id"])
+            row = db.get(NotificationChannel, item["id"])
             if row:
                 row.name = item["name"]
                 row.type = item["type"]
@@ -348,7 +283,7 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
     jobs_list = _read_json("backup_jobs.json")
     if jobs_list and isinstance(jobs_list, list):
         for item in jobs_list:
-            row = db.query(BackupJob).get(item["id"])
+            row = db.get(BackupJob, item["id"])
             if row:
                 row.name = item["name"]
                 row.label_key = item.get("label_key", "dvbm.job")

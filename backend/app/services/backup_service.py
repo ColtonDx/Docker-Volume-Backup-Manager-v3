@@ -88,7 +88,7 @@ class BackupService:
         if kind == "backup":
             db = SessionLocal()
             try:
-                job = db.query(BackupJob).get(entity_id)
+                job = db.get(BackupJob, entity_id)
                 job_timeout = job.timeout_seconds if job else None
                 job_name = job.name if job else str(entity_id)
             finally:
@@ -157,9 +157,10 @@ class BackupService:
         db = SessionLocal()
         start_time = time.time()
         record = None
+        stopped: list[str] = []
 
         try:
-            job = db.query(BackupJob).get(job_id)
+            job = db.get(BackupJob, job_id)
             if not job:
                 logger.error("Backup job %d not found", job_id)
                 return
@@ -305,7 +306,7 @@ class BackupService:
 
             job_name = "unknown"
             try:
-                j = db.query(BackupJob).get(job_id)
+                j = db.get(BackupJob, job_id)
                 if j:
                     job_name = j.name
             except Exception:
@@ -314,10 +315,12 @@ class BackupService:
             self._log(db, "error", job_name, f"Backup failed: {exc}")
             notification_service.notify_event("failure", job_name, str(exc))
 
-            # Note: containers that were stopped before the failure are not restarted
-            # here because their IDs are not reliably available at this point.
-            # They will remain stopped and must be restarted manually or on next
-            # scheduled backup run.
+            if stopped:
+                try:
+                    docker_service.start_containers(stopped)
+                    self._log(db, "info", job_name, f"Restarted {len(stopped)} container(s) after backup failure")
+                except Exception as restart_exc:
+                    self._log(db, "warning", job_name, f"Failed to restart containers after backup failure: {restart_exc}")
 
         finally:
             db.close()
@@ -337,7 +340,7 @@ class BackupService:
         db = SessionLocal()
 
         try:
-            record = db.query(BackupRecord).get(backup_id)
+            record = db.get(BackupRecord, backup_id)
             if not record:
                 logger.error("Backup record %d not found", backup_id)
                 return
