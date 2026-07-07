@@ -31,7 +31,7 @@ class ConfigBackupService:
     # ------------------------------------------------------------------
 
     def _do_backup(self, db) -> None:
-        from app.models import LogEntry, NotificationChannel, Setting, StorageBackend
+        from app.models import StorageBackend
         from app.services.storage_service import storage_service
 
         settings_map = self._load_settings(db)

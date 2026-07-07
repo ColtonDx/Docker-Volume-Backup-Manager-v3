@@ -22,8 +22,6 @@ import tarfile
 import threading
 import time
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +100,7 @@ class BackupService:
         """
         from app.config import settings
         from app.database import SessionLocal
-        from app.models import BackupJob, BackupRecord
+        from app.models import BackupJob
 
         # Resolve the timeout for this specific job
         timeout: int | None = None
@@ -186,7 +184,7 @@ class BackupService:
 
     def _run_backup(self, job_id: int) -> None:
         from app.database import SessionLocal
-        from app.models import BackupJob, BackupRecord, LogEntry
+        from app.models import BackupJob, BackupRecord
         from app.services.docker_service import docker_service
         from app.services.storage_service import storage_service
         from app.services.notification_service import notification_service
@@ -369,7 +367,7 @@ class BackupService:
 
     def _run_restore(self, backup_id: int) -> None:
         from app.database import SessionLocal
-        from app.models import BackupRecord, LogEntry
+        from app.models import BackupRecord
         from app.services.docker_service import docker_service
         from app.services.storage_service import storage_service
         from app.services.notification_service import notification_service

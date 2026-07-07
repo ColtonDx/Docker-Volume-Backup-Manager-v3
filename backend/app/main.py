@@ -30,7 +30,8 @@ from app.services.scheduler_service import scheduler_service
 
 def _configure_syslog_on_startup() -> None:
     """Read syslog settings from DB and attach handler if enabled."""
-    import json, logging
+    import json
+    import logging
     _log = logging.getLogger(__name__)
     try:
         from app.database import SessionLocal
@@ -58,7 +59,8 @@ def _configure_syslog_on_startup() -> None:
 
 def _configure_timezone_on_startup() -> None:
     """Read the 'timezone' DB setting and apply it before the scheduler starts."""
-    import json, logging
+    import json
+    import logging
     _log = logging.getLogger(__name__)
     try:
         from app.database import SessionLocal
@@ -83,7 +85,8 @@ def _configure_timezone_on_startup() -> None:
 
 def _sync_rclone_config_on_startup() -> None:
     """Ensure the rclone config file is written to disk from DB settings."""
-    import json, logging
+    import json
+    import logging
     _log = logging.getLogger(__name__)
     try:
         from app.database import SessionLocal

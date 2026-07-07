@@ -1,0 +1,14 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# Keep ruff's sensible defaults (pyflakes F + core pycodestyle E), minus one.
+extend-ignore = [
+    # `column == True` / `== False` is the idiomatic, correct form in SQLAlchemy
+    # filter() clauses; the truthiness form ruff suggests is not equivalent.
+    "E712",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

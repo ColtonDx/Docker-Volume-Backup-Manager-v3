@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
 
 from app.config import settings

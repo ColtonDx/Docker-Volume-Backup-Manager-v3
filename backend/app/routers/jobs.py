@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import BackupJob, BackupRecord, LogEntry
-from app.schemas import BackupJobCreate, BackupJobOut, BackupJobUpdate, BackupRecordOut, JobDetailStats, LogEntryOut
+from app.schemas import BackupJobCreate, BackupJobOut, BackupJobUpdate, JobDetailStats
 from app.services.backup_service import backup_service
 from app.services.docker_service import docker_service
 from app.services.scheduler_service import scheduler_service
