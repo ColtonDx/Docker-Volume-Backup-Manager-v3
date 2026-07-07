@@ -186,11 +186,28 @@ def import_config(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="File must be a .zip archive")
 
+    # Bounds to prevent memory exhaustion / zip bombs. Config exports are tiny
+    # (a handful of small JSON files), so these limits are generous.
+    MAX_UPLOAD_BYTES = 10 * 1024 * 1024        # 10 MiB compressed upload
+    MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024  # 50 MiB total inflated
+    MAX_ENTRIES = 100
+
+    # Read at most MAX_UPLOAD_BYTES + 1 so an oversize upload is detected
+    # without buffering the whole thing.
+    raw = file.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Import file too large")
+
     try:
-        raw = file.file.read()
         zf = zipfile.ZipFile(io.BytesIO(raw))
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid or corrupted zip file")
+
+    infos = zf.infolist()
+    if len(infos) > MAX_ENTRIES:
+        raise HTTPException(status_code=400, detail="Import archive has too many entries")
+    if sum(zi.file_size for zi in infos) > MAX_UNCOMPRESSED_BYTES:
+        raise HTTPException(status_code=400, detail="Import archive is too large when decompressed")
 
     def _read_json(name: str):
         """Read and parse a JSON file from the zip, returning None if missing."""
