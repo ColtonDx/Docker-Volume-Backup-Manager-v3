@@ -166,7 +166,9 @@ class StorageService:
 
     @staticmethod
     def _localfs_test(config: dict) -> tuple[bool, str]:
-        path = config.get("path", "/backups")
+        # Default must match _localfs_upload/_localfs_list so the connection
+        # test validates the same directory backups are actually written to.
+        path = config.get("path", "/local-backups")
         try:
             os.makedirs(path, exist_ok=True)
             test_file = os.path.join(path, ".dvbm-test")
@@ -178,7 +180,7 @@ class StorageService:
 
     @staticmethod
     def _localfs_list(config: dict, prefix: str = "", suffix: str = ".tar.gz") -> list[dict]:
-        base = config.get("path", "/backups")
+        base = config.get("path", "/local-backups")
         results = []
         if not os.path.isdir(base):
             return results
