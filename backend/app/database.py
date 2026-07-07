@@ -110,6 +110,21 @@ def _sqlcipher_creator(db_path: str, passphrase: str):
     return creator
 
 
+def _iterdump_statements(conn) -> list[str]:
+    """Return a full SQL dump of *conn* as a list of statements.
+
+    stdlib sqlite3 connections provide conn.iterdump(); sqlcipher3 connections
+    do not, so fall back to the stdlib dump algorithm, which works on any
+    SQLite-compatible connection because it operates purely through the DBAPI
+    cursor and the SQL quote() function.
+    """
+    iterdump = getattr(conn, "iterdump", None)
+    if iterdump is not None:
+        return list(iterdump())
+    from sqlite3.dump import _iterdump
+    return list(_iterdump(conn))
+
+
 def _write_encrypted_from_dump(sql_statements, dest_path: Path, passphrase: str) -> None:
     """Create a new native-KDF encrypted DB at dest_path from SQL dump statements
     and verify it opens and is readable. Raises on any failure."""
@@ -159,7 +174,7 @@ def _migrate_plaintext_to_encrypted(db_path: Path, passphrase: str) -> None:
     # Step 1: read full SQL dump from the plaintext DB
     plain_conn = sqlite3.connect(str(db_path))
     try:
-        sql_statements = list(plain_conn.iterdump())
+        sql_statements = _iterdump_statements(plain_conn)
     finally:
         plain_conn.close()
 
@@ -210,7 +225,7 @@ def _migrate_legacy_kdf_to_new(db_path: Path, passphrase: str) -> None:
     try:
         _apply_legacy_key(src, passphrase)
         src.execute("SELECT count(*) FROM sqlite_master").fetchone()  # confirm unlock
-        sql_statements = list(src.iterdump())
+        sql_statements = _iterdump_statements(src)
     finally:
         src.close()
 
