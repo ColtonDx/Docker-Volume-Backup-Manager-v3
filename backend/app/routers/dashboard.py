@@ -1,4 +1,6 @@
+import json
 import logging
+import shutil
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.triggers.cron import CronTrigger
@@ -99,12 +101,34 @@ def get_dashboard(db: Session = Depends(get_db)):
     upcoming.sort(key=lambda x: x["next_run"] or "9999")
     upcoming = upcoming[:5]
 
+    # Total bytes stored across all successful backups
+    total_storage_used = int(
+        db.query(func.coalesce(func.sum(BackupRecord.size_bytes), 0))
+        .filter(BackupRecord.status == "success")
+        .scalar()
+        or 0
+    )
+
+    # Per-backend capacity gauges. Only local filesystem backends expose a real
+    # capacity; remote backends (S3/FTP/rclone) have no knowable total, so they
+    # are omitted rather than shown as a meaningless gauge.
+    storage_usage: list[dict] = []
+    for sb in db.query(StorageBackend).filter(StorageBackend.type == "localfs").all():
+        try:
+            cfg = json.loads(sb.config_json or "{}")
+            du = shutil.disk_usage(cfg.get("path", "/local-backups"))
+            storage_usage.append({"name": sb.name, "used": du.used, "total": du.total})
+        except Exception:
+            logger.debug("Could not stat disk usage for storage %r", sb.name, exc_info=True)
+
     return DashboardStats(
         total_jobs=total_jobs,
         active_jobs=active_jobs,
+        total_storage_used_bytes=total_storage_used,
         storage_backends_count=storage_count,
         success_rate_30d=round(success_rate, 1),
         active_alerts=active_alerts,
         recent_jobs=recent_jobs,
         upcoming_schedules=upcoming,
+        storage_usage=storage_usage,
     )
