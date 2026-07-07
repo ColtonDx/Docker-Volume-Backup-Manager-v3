@@ -17,14 +17,19 @@ services:
       # Optional: mount your rclone config
       # - ~/.config/rclone:/root/.config/rclone:ro
     environment:
-      # REQUIRED: Set a password for the web UI
+      # REQUIRED: Set a strong, unique password for the web UI.
+      # Leaving this unset or at a well-known default (admin/changeme/password)
+      # logs a loud security warning on startup — the UI would be unprotected.
       - APP_PASSWORD=changeme
+
+      # REQUIRED: signing key for auth tokens. The app refuses to start until
+      # this is set to a strong random value (a public/default key would let
+      # anyone forge admin tokens). Generate one with:
+      #     openssl rand -hex 32
+      - JWT_SECRET=
 
       # Optional: custom instance name shown in the sidebar
       # - APP_NAME=Docker Volume Backup Manager
-
-      # Optional: custom JWT secret (strongly recommended in production)
-      # - JWT_SECRET=my-super-secret-key
 
       # Optional: Docker label key to match jobs to containers
       # - DOCKER_LABEL_KEY=dvbm.job

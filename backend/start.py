@@ -111,6 +111,13 @@ def _generate_self_signed_cert(cert_path: Path, key_path: Path) -> None:
 def main() -> None:
     from app.config import settings
 
+    # Fail fast on insecure secret configuration before binding any port.
+    try:
+        settings.validate_secrets()
+    except RuntimeError as exc:
+        log.error("%s", exc)
+        raise SystemExit(1)
+
     host = os.getenv("UVICORN_HOST", "0.0.0.0")
     port = int(os.getenv("UVICORN_PORT", "8000"))
     log_level = os.getenv("UVICORN_LOG_LEVEL", "info")

@@ -1,5 +1,15 @@
+import logging
 import os
 from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+# Signing keys that must never be used: the empty string (unset) and the old
+# built-in placeholder that shipped in previous versions.
+_INSECURE_JWT_SECRETS = {"", "change-me-in-production-please"}
+
+# Passwords weak enough to warrant a loud startup warning.
+_WEAK_PASSWORDS = {"", "admin", "changeme", "password"}
 
 
 def _read_version() -> str:
@@ -21,7 +31,9 @@ class Settings:
 
     # Auth
     AUTH_PASSWORD: str = os.getenv("APP_PASSWORD", "admin")
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "change-me-in-production-please")
+    # No built-in default: a hardcoded signing key is public and lets anyone
+    # forge admin tokens. Enforced non-empty at startup by validate_secrets().
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "")
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = int(os.getenv("JWT_EXPIRE_HOURS", "24"))
 
@@ -78,6 +90,39 @@ class Settings:
     # Override these to supply your own cert (e.g. from Let's Encrypt).
     _SSL_CERT_FILE: str = os.getenv("SSL_CERT_FILE", "")
     _SSL_KEY_FILE: str = os.getenv("SSL_KEY_FILE", "")
+
+    # Guard so the password warning is emitted at most once per process.
+    _secrets_validated: bool = False
+
+    def validate_secrets(self) -> None:
+        """Validate secret configuration at startup.
+
+        - JWT_SECRET: hard failure if unset or left at the old built-in default.
+          A public signing key allows anyone to forge admin tokens.
+        - APP_PASSWORD: loud warning (non-fatal) if unset or a known-weak value.
+        """
+        if self.JWT_SECRET.strip() in _INSECURE_JWT_SECRETS:
+            raise RuntimeError(
+                "JWT_SECRET is not set (or still uses the old built-in default). "
+                "A hardcoded signing key is public and lets anyone forge admin "
+                "tokens. Set the JWT_SECRET environment variable to a strong "
+                "random value before starting, for example:\n"
+                "    JWT_SECRET=$(openssl rand -hex 32)\n"
+                "Refusing to start with an insecure signing key."
+            )
+
+        if self._secrets_validated:
+            return
+        self._secrets_validated = True
+
+        if self.AUTH_PASSWORD.strip().lower() in _WEAK_PASSWORDS:
+            log.warning(
+                "=" * 72 + "\n"
+                "SECURITY WARNING: APP_PASSWORD is unset or set to a well-known "
+                "default (%r). The web UI is effectively unprotected. Set "
+                "APP_PASSWORD to a strong, unique value.\n" + "=" * 72,
+                self.AUTH_PASSWORD,
+            )
 
     @property
     def database_url(self) -> str:

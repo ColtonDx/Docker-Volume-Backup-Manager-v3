@@ -112,6 +112,9 @@ def _sync_rclone_config_on_startup() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    # Defense in depth: enforce secret validation even if the app is launched
+    # directly via `uvicorn app.main:app` instead of start.py.
+    settings.validate_secrets()
     init_db()
     _configure_timezone_on_startup()
     _sync_rclone_config_on_startup()
