@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.pool import NullPool
 
@@ -324,6 +324,25 @@ def _build_engine():
 
 
 engine = _build_engine()
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_conn, connection_record) -> None:
+    """Enable WAL and a busy timeout on every connection.
+
+    WAL lets readers and a writer proceed concurrently, and busy_timeout makes a
+    connection wait for a lock instead of failing immediately with
+    "database is locked" — the background backup workers write while the API
+    reads. Runs after the (encrypted) creator's key PRAGMAs.
+    """
+    try:
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA busy_timeout=5000")
+        cur.close()
+    except Exception:
+        log.debug("Could not set SQLite pragmas", exc_info=True)
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
