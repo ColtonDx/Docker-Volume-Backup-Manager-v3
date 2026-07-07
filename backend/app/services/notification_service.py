@@ -6,16 +6,54 @@ when backup events occur.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import smtplib
+import socket
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Addresses refused as notification targets: IPv4/IPv6 link-local, which
+# includes cloud instance metadata (169.254.169.254). Private LAN ranges are
+# intentionally allowed — self-hosted webhooks commonly point at the LAN.
+_BLOCKED_NETWORKS = (
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("fe80::/10"),
+)
+
+
+def _validate_outbound_url(url: str) -> None:
+    """Reject non-HTTP(S) schemes and link-local / metadata destinations.
+
+    Raises ValueError if the URL must not be fetched. Note this is a best-effort
+    guard (a hostile DNS name could still rebind between this check and the
+    request); it is aimed at accidental/basic SSRF, not a fully hardened proxy.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Blocked URL scheme: {parsed.scheme or '(none)'}")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("URL has no host")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise ValueError(f"Could not resolve host '{host}': {exc}")
+    for info in infos:
+        raw_addr = info[4][0].split("%")[0]  # strip any IPv6 zone id
+        try:
+            ip = ipaddress.ip_address(raw_addr)
+        except ValueError:
+            continue
+        if any(ip in net for net in _BLOCKED_NETWORKS):
+            raise ValueError(f"Blocked destination address {ip} (link-local/metadata)")
 
 
 class NotificationService:
@@ -131,6 +169,7 @@ class NotificationService:
         webhook_url = config.get("webhook_url", "")
         if not webhook_url:
             raise ValueError("Slack webhook URL not configured")
+        _validate_outbound_url(webhook_url)
 
         emoji = {"success": ":white_check_mark:", "failure": ":x:", "warning": ":warning:"}.get(event, ":information_source:")
 
@@ -156,6 +195,7 @@ class NotificationService:
         webhook_url = config.get("webhook_url", "").strip()
         if not webhook_url:
             raise ValueError("Discord webhook URL not configured")
+        _validate_outbound_url(webhook_url)
 
         color_map = {"success": 0x22C55E, "failure": 0xEF4444, "warning": 0xF59E0B}
         color = color_map.get(event, 0x3B82F6)
@@ -209,6 +249,7 @@ class NotificationService:
         url = config.get("url", "")
         if not url:
             raise ValueError("Webhook URL not configured")
+        _validate_outbound_url(url)
 
         payload = {
             "source": "dvbm",
@@ -240,6 +281,7 @@ class NotificationService:
         app_token = config.get("app_token", "")
         if not server_url or not app_token:
             raise ValueError("Gotify server URL and application token are required")
+        _validate_outbound_url(server_url)
 
         priority_map = {"failure": 8, "warning": 5, "success": 2, "info": 1}
         priority = config.get("priority", priority_map.get(event, 4))
@@ -273,6 +315,7 @@ class NotificationService:
         topic = config.get("topic", "")
         if not topic:
             raise ValueError("ntfy topic is required")
+        _validate_outbound_url(server_url)
 
         # Map events to ntfy priority names (1-5) and tags
         priority_map = {"failure": "5", "warning": "4", "success": "3", "info": "3"}
