@@ -51,7 +51,16 @@ If a backup fails after containers have already been stopped, the containers are
 
 ```bash
 # Clone or download the repo, then edit docker-compose.yml:
-# Set APP_PASSWORD to something other than "changeme"
+#
+# 1. Set APP_PASSWORD to something other than "changeme".
+#
+# 2. Set JWT_SECRET to a strong random value. This is REQUIRED — the app
+#    refuses to start until it is set (a shared/default signing key would let
+#    anyone forge admin tokens). Generate one with:
+#
+#        openssl rand -hex 32
+#
+#    and paste the output after JWT_SECRET= in docker-compose.yml.
 
 docker compose up -d
 
@@ -60,6 +69,11 @@ docker compose up -d
 # Accept the self-signed certificate warning, or import /data/certs/cert.pem
 # into your OS or browser trust store.
 ```
+
+> If the container exits immediately and the logs repeat *"Refusing to start
+> with an insecure signing key"*, `JWT_SECRET` is not set. Set it (see above)
+> and the container will start. The repetition is just the `restart` policy
+> retrying the failed start.
 
 ---
 
@@ -107,12 +121,14 @@ services:
       # - ~/.config/rclone:/root/.config/rclone:ro
 
     environment:
-      # Login password for the web UI. Change this.
+      # Login password for the web UI. Change this. Leaving it unset or at a
+      # well-known default (admin/changeme/password) logs a loud warning.
       - APP_PASSWORD=changeme
 
-      # Signs JWT session tokens. Use a long random string in production.
-      # If not set, a hardcoded default is used (insecure).
-      # - JWT_SECRET=replace-with-something-random
+      # REQUIRED: signs JWT session tokens. The app refuses to start until this
+      # is set to a strong random value (a shared/default key would let anyone
+      # forge admin tokens). Generate one with: openssl rand -hex 32
+      - JWT_SECRET=
 
       # How long a login session lasts, in hours. Default: 24.
       # - JWT_EXPIRE_HOURS=24
