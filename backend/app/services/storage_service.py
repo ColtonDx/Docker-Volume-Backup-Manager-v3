@@ -381,6 +381,33 @@ class StorageService:
     # Rclone
     # ==================================================================
 
+    # Flags an operator may not supply via a storage's extra-flags field. The
+    # config path is controlled by the app; allowing an override would point
+    # rclone at an arbitrary remote definition.
+    _BLOCKED_RCLONE_FLAG_PREFIXES = ("--config",)
+
+    @staticmethod
+    def _rclone_extra_flags(config: dict) -> list[str]:
+        """Parse the storage's extra rclone flags safely.
+
+        Uses shlex so quoted arguments are handled correctly, and rejects flags
+        that would override the app-managed --config path.
+        """
+        import shlex
+
+        raw = config.get("flags", "") or ""
+        if not raw.strip():
+            return []
+        try:
+            tokens = shlex.split(raw)
+        except ValueError as exc:
+            raise ValueError(f"Invalid rclone flags: {exc}")
+        for tok in tokens:
+            low = tok.lower()
+            if any(low == p or low.startswith(p + "=") for p in StorageService._BLOCKED_RCLONE_FLAG_PREFIXES):
+                raise ValueError(f"Disallowed rclone flag: {tok}")
+        return tokens
+
     @staticmethod
     def _rclone_upload(config: dict, local_path: str, remote_name: str) -> str:
         from app.config import settings
@@ -389,9 +416,7 @@ class StorageService:
         remote_dir = config.get("path", "").rstrip("/")
         dest = f"{remote}:{remote_dir}/{remote_name}"
         cmd = [settings.RCLONE_BINARY, "copyto", local_path, dest, "--config", settings.RCLONE_CONFIG]
-        extra_flags = config.get("flags", "")
-        if extra_flags:
-            cmd.extend(extra_flags.split())
+        cmd.extend(StorageService._rclone_extra_flags(config))
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         if result.returncode != 0:
             raise RuntimeError(f"rclone upload failed: {result.stderr}")
@@ -403,9 +428,7 @@ class StorageService:
         from app.config import settings
 
         cmd = [settings.RCLONE_BINARY, "copyto", remote_path, local_path, "--config", settings.RCLONE_CONFIG]
-        extra_flags = config.get("flags", "")
-        if extra_flags:
-            cmd.extend(extra_flags.split())
+        cmd.extend(StorageService._rclone_extra_flags(config))
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         if result.returncode != 0:
             raise RuntimeError(f"rclone download failed: {result.stderr}")
@@ -453,9 +476,7 @@ class StorageService:
             "--config", settings.RCLONE_CONFIG,
             "--no-modtime",
         ]
-        extra_flags = config.get("flags", "")
-        if extra_flags:
-            cmd.extend(extra_flags.split())
+        cmd.extend(StorageService._rclone_extra_flags(config))
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(f"rclone lsjson failed: {result.stderr}")
