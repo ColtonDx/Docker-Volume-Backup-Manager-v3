@@ -165,6 +165,14 @@ app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 
+
+# ---- Health check (unauthenticated) --------------------------------------
+# Registered before the SPA catch-all so orchestrators/HEALTHCHECK can probe it.
+@app.get("/health", tags=["health"])
+async def health():
+    return {"status": "ok", "version": settings.APP_VERSION}
+
+
 # ---- Serve built frontend (production) -----------------------------------
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 if STATIC_DIR.is_dir():
