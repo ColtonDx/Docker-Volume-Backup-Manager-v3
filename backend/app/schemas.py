@@ -54,12 +54,13 @@ class StorageBackendOut(StorageBackendBase):
                 parsed = json.loads(raw)
             except (json.JSONDecodeError, TypeError):
                 parsed = {}
+            from app.secrets_mask import mask_config
             # Build a dict representation so Pydantic can work with it
             return {
                 "id": data.id,
                 "name": data.name,
                 "type": data.type,
-                "config": parsed,
+                "config": mask_config(parsed),
                 "created_at": data.created_at,
                 "updated_at": data.updated_at,
             }
@@ -286,7 +287,8 @@ class NotificationChannelOut(NotificationChannelBase):
                 "updated_at": data.updated_at,
             }
             try:
-                d["config"] = json.loads(data.config_json or "{}")
+                from app.secrets_mask import mask_config
+                d["config"] = mask_config(json.loads(data.config_json or "{}"))
             except (json.JSONDecodeError, TypeError):
                 d["config"] = {}
             try:

@@ -80,7 +80,9 @@ def update_storage(storage_id: int, body: StorageBackendUpdate, db: Session = De
     if body.type is not None:
         storage.type = body.type
     if body.config is not None:
-        storage.config_json = json.dumps(body.config)
+        from app.secrets_mask import unmask_config
+        existing = json.loads(storage.config_json or "{}")
+        storage.config_json = json.dumps(unmask_config(body.config, existing))
     db.commit()
     db.refresh(storage)
     return storage

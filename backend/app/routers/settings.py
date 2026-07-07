@@ -58,23 +58,37 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
+def _decode_setting(value: Any) -> Any:
+    """Decode a stored setting value (JSON-encoded, with a raw-string fallback)."""
+    if value is None:
+        return None
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return value
+
+
 @router.get("", response_model=SettingsBundle)
 def get_settings(db: Session = Depends(get_db)):
     rows = db.query(Setting).all()
     result = dict(DEFAULTS)
     for row in rows:
-        try:
-            result[row.key] = json.loads(row.value) if row.value is not None else None
-        except (json.JSONDecodeError, TypeError):
-            result[row.key] = row.value
+        result[row.key] = _decode_setting(row.value)
     # Instance name is always derived from the APP_NAME env var (read-only)
     result["instance_name"] = app_settings.APP_NAME
-    return SettingsBundle(settings=result)
+    from app.secrets_mask import mask_config
+    return SettingsBundle(settings=mask_config(result))
 
 
 @router.put("")
 def update_settings(bundle: SettingsBundle, db: Session = Depends(get_db)):
-    for key, value in bundle.settings.items():
+    # Preserve secret settings left at the masking sentinel (unchanged) rather
+    # than overwriting the stored value with the sentinel itself.
+    from app.secrets_mask import unmask_config
+    stored = {row.key: _decode_setting(row.value) for row in db.query(Setting).all()}
+    incoming = unmask_config(bundle.settings, stored)
+
+    for key, value in incoming.items():
         existing = db.get(Setting, key)
         serialized = json.dumps(value)
         if existing:
@@ -84,15 +98,15 @@ def update_settings(bundle: SettingsBundle, db: Session = Depends(get_db)):
     db.commit()
 
     # If the rclone inline config was provided, write it to the config file
-    _sync_rclone_config(bundle.settings)
+    _sync_rclone_config(incoming)
 
     # Reconfigure syslog if settings changed
     from app.syslog_handler import configure_syslog
-    configure_syslog(bundle.settings)
+    configure_syslog(incoming)
 
     # Reconfigure scheduler timezone if it changed
     try:
-        new_tz = bundle.settings.get("timezone")
+        new_tz = incoming.get("timezone")
         from app.services.scheduler_service import scheduler_service
         if new_tz and isinstance(new_tz, str) and new_tz.strip():
             scheduler_service.reconfigure_timezone(new_tz.strip())

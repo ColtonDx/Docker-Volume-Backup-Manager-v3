@@ -56,7 +56,9 @@ def update_notification(
     if body.type is not None:
         channel.type = body.type
     if body.config is not None:
-        channel.config_json = json.dumps(body.config)
+        from app.secrets_mask import unmask_config
+        existing = json.loads(channel.config_json or "{}")
+        channel.config_json = json.dumps(unmask_config(body.config, existing))
     if body.events is not None:
         channel.events_json = json.dumps(body.events)
     if body.enabled is not None:
