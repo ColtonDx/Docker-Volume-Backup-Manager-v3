@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import multiprocessing
 import os
 import shutil
 import tarfile
@@ -25,6 +26,26 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# ----------------------------------------------------------------------------
+# Subprocess entry points
+# ----------------------------------------------------------------------------
+# Backup/restore work runs in a separate process (spawn) so a job that exceeds
+# its timeout can be forcibly killed — a thread cannot. These must be module
+# level so the spawn start method can import them by name. Each rebuilds its own
+# DB/Docker state from the fresh interpreter.
+
+def _run_backup_entry(job_id: int) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+    from app.services.backup_service import backup_service
+    backup_service._run_backup(job_id)
+
+
+def _run_restore_entry(backup_id: int) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+    from app.services.backup_service import backup_service
+    backup_service._run_restore(backup_id)
 
 
 class BackupService:
@@ -102,24 +123,41 @@ class BackupService:
             timeout = raw if raw > 0 else None
             job_name = f"restore-{entity_id}"
 
-        target = self._run_backup if kind == "backup" else self._run_restore
-        worker = threading.Thread(target=target, args=(entity_id,), daemon=True)
+        target = _run_backup_entry if kind == "backup" else _run_restore_entry
+        # spawn (not fork): forking a multithreaded process — uvicorn workers,
+        # APScheduler, held locks — risks deadlocks in the child. spawn gives a
+        # clean interpreter that rebuilds its own DB/Docker state.
+        ctx = multiprocessing.get_context("spawn")
+        worker = ctx.Process(target=target, args=(entity_id,), daemon=True)
         worker.start()
         worker.join(timeout)
 
         if worker.is_alive():
-            # The worker thread is still running — it has exceeded its timeout.
-            # Python cannot forcibly kill a thread, so we mark the record as
-            # timed out in the DB and release the semaphore. The thread will
-            # eventually finish or die with the process.
+            # Exceeded its timeout. Because this is a separate process it can be
+            # forcibly killed, so the concurrency slot is only released once the
+            # worker is truly dead — no orphan can still be mutating containers.
             logger.error(
-                "%s job %s timed out after %ds and will be marked as error",
+                "%s job %s timed out after %ds; terminating worker process",
                 kind, job_name, timeout,
             )
-            self._mark_timed_out(entity_id, kind, timeout)
+            worker.terminate()
+            worker.join(10)
+            if worker.is_alive():
+                worker.kill()
+                worker.join()
+            self._mark_incomplete(entity_id, kind, f"Job timed out after {timeout}s")
+        elif worker.exitcode not in (0, None):
+            # Worker died abnormally (crash/OOM/kill) without recording a result.
+            logger.error(
+                "%s job %s worker exited abnormally (code %s)",
+                kind, job_name, worker.exitcode,
+            )
+            self._mark_incomplete(
+                entity_id, kind, f"Worker process exited abnormally (code {worker.exitcode})"
+            )
 
-    def _mark_timed_out(self, entity_id: int, kind: str, timeout: int) -> None:
-        """Write a timeout error record to the database."""
+    def _mark_incomplete(self, entity_id: int, kind: str, message: str) -> None:
+        """Mark a still-'running' record as failed when its worker did not finish."""
         from app.database import SessionLocal
         from app.models import BackupRecord
         from app.services.notification_service import notification_service
@@ -136,13 +174,13 @@ class BackupService:
                 )
                 if record:
                     record.status = "error"
-                    record.error_message = f"Job timed out after {timeout}s"
+                    record.error_message = message
                     record.completed_at = datetime.now(timezone.utc)
                     db.commit()
                     job_name = record.job.name if record.job else str(entity_id)
-                    notification_service.notify_event("failure", job_name, f"Backup timed out after {timeout}s")
+                    notification_service.notify_event("failure", job_name, message)
         except Exception as exc:
-            logger.error("Failed to mark timed-out job: %s", exc)
+            logger.error("Failed to mark incomplete job: %s", exc)
         finally:
             db.close()
 
