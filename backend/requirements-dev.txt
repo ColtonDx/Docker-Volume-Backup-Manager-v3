@@ -1,0 +1,3 @@
+# Backend test/lint tooling (kept separate from runtime requirements.txt)
+pytest>=8.0
+ruff>=0.6.0
