@@ -1,4 +1,3 @@
-import json
 from datetime import datetime, timedelta, timezone
 from typing import List
 
@@ -117,7 +116,6 @@ def list_jobs(db: Session = Depends(get_db)):
         ).all()
     }
 
-    from app.services.backup_service import backup_service
     queued_ids = backup_service.queued_job_ids
 
     results = []
