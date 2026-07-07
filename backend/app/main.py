@@ -178,6 +178,24 @@ async def health():
 
 # ---- Serve built frontend (production) -----------------------------------
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+def safe_static_file(root: Path, full_path: str) -> Path | None:
+    """Resolve *full_path* under *root*, returning the file only if it is a real
+    file contained inside *root*.
+
+    Prevents path traversal: a raw request such as "GET /../secret" would
+    otherwise escape the static directory and read arbitrary container files.
+    Returns None when the path is empty, escapes the root, or is not a file.
+    """
+    if not full_path:
+        return None
+    candidate = (root / full_path).resolve()
+    if candidate.is_relative_to(root) and candidate.is_file():
+        return candidate
+    return None
+
+
 if STATIC_DIR.is_dir():
     # Resolved absolute root used to contain every served path. Symlinks and
     # ".." segments are collapsed by resolve() so containment can be checked.
@@ -192,12 +210,9 @@ if STATIC_DIR.is_dir():
 
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
-        # If a real static file exists at the path, serve it (e.g. robots.txt,
-        # favicon). The resolved path MUST stay inside the static root — a raw
-        # request such as "GET /../secret" would otherwise escape the directory
-        # and read arbitrary files off the container (path traversal).
-        if full_path:
-            candidate = (_static_root / full_path).resolve()
-            if candidate.is_relative_to(_static_root) and candidate.is_file():
-                return FileResponse(candidate)
+        # Serve a real static file (e.g. robots.txt, favicon) only if it stays
+        # inside the static root; otherwise fall back to the SPA entry point.
+        static_file = safe_static_file(_static_root, full_path)
+        if static_file is not None:
+            return FileResponse(static_file)
         return FileResponse(_index_html)
