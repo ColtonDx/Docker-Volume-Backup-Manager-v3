@@ -1,6 +1,7 @@
 import hmac
 import threading
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -9,6 +10,53 @@ from jose import JWTError, jwt
 from app.config import settings
 
 security = HTTPBearer(auto_error=False)
+
+# Filename (stored next to the database) holding the current token version.
+_TOKEN_VERSION_FILENAME = ".auth_token_version"
+
+
+class TokenVersionStore:
+    """Server-side token version used to revoke all outstanding JWTs.
+
+    Every issued token carries the current version as a "tv" claim. Bumping the
+    version (e.g. on logout) invalidates every previously-issued token. The
+    value is persisted in a file beside the database and cached in memory, so
+    validation costs no per-request I/O. Revocation is per-process, which is
+    correct for the default single-process deployment.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._version: int | None = None
+
+    def _path(self) -> Path:
+        return settings.db_file_path.parent / _TOKEN_VERSION_FILENAME
+
+    def _read_disk(self) -> int:
+        try:
+            return int(self._path().read_text().strip())
+        except (FileNotFoundError, ValueError):
+            return 0
+
+    def get(self) -> int:
+        with self._lock:
+            if self._version is None:
+                self._version = self._read_disk()
+            return self._version
+
+    def bump(self) -> int:
+        """Increment the version and persist it. Returns the new value."""
+        with self._lock:
+            current = self._version if self._version is not None else self._read_disk()
+            new_version = current + 1
+            path = self._path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(str(new_version))
+            self._version = new_version
+            return new_version
+
+
+token_version_store = TokenVersionStore()
 
 
 class LoginThrottle:
@@ -48,9 +96,9 @@ login_throttle = LoginThrottle()
 
 
 def create_access_token() -> str:
-    """Create a JWT access token."""
+    """Create a JWT access token stamped with the current token version."""
     expire = datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRE_HOURS)
-    payload = {"sub": "admin", "exp": expire}
+    payload = {"sub": "admin", "exp": expire, "tv": token_version_store.get()}
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -84,6 +132,14 @@ def get_current_user(
         sub: str | None = payload.get("sub")
         if sub is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        # Reject tokens whose version does not match the current server value
+        # (missing claim on pre-upgrade tokens, or revoked via logout).
+        if payload.get("tv") != token_version_store.get():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         return sub
     except JWTError:
         raise HTTPException(

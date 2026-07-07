@@ -1,8 +1,14 @@
 import asyncio
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.auth import create_access_token, login_throttle, verify_password
+from app.auth import (
+    create_access_token,
+    get_current_user,
+    login_throttle,
+    token_version_store,
+    verify_password,
+)
 from app.schemas import LoginRequest, TokenResponse
 
 router = APIRouter()
@@ -22,3 +28,13 @@ async def login(body: LoginRequest):
     login_throttle.record_success()
     token = create_access_token()
     return TokenResponse(token=token)
+
+
+@router.post("/logout")
+def logout(_: str = Depends(get_current_user)):
+    """Revoke all outstanding tokens by bumping the server-side token version.
+
+    Requires a valid token, so an anonymous caller cannot force logouts.
+    """
+    token_version_store.bump()
+    return {"message": "Logged out"}
