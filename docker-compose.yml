@@ -6,7 +6,11 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Required: Docker socket so we can manage containers
+      # Required: Docker socket so we can manage containers.
+      # WARNING: access to the Docker socket is equivalent to root on the host.
+      # To limit exposure, front the daemon with a docker-socket-proxy and set
+      # DOCKER_SOCKET=tcp://<proxy>:2375 instead of mounting the raw socket.
+      # See the "Security" section of the README.
       - /var/run/docker.sock:/var/run/docker.sock
       # Persistent data (SQLite database + auto-generated TLS certs)
       - data:/data

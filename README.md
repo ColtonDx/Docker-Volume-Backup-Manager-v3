@@ -628,6 +628,54 @@ Do not change the key after initial setup without a migration plan. The app will
 
 ---
 
+## Security
+
+### Docker socket access
+
+This app manages your containers, so it needs the Docker socket
+(`/var/run/docker.sock`). **Mounting the Docker socket grants control of the
+Docker daemon, which is equivalent to root on the host.** The container runs as
+root so that socket access works consistently across hosts (the socket's group
+ownership varies between distributions).
+
+To reduce this exposure, put a **Docker socket proxy** in front of the daemon
+and grant only the API calls this app uses (list/inspect/start/stop containers,
+volume and image operations) instead of mounting the raw socket. For example
+using [`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy):
+
+```yaml
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - VOLUMES=1
+      - POST=1          # required to start/stop containers
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  docker-volume-backup-manager:
+    # ...
+    environment:
+      - DOCKER_SOCKET=tcp://docker-socket-proxy:2375
+    # and remove the direct - /var/run/docker.sock:/var/run/docker.sock mount
+```
+
+Keep the app on a trusted network and behind authentication regardless.
+
+### Other hardening
+
+- **`JWT_SECRET` is required** — the app refuses to start without a strong,
+  unique value (a shared/default signing key would let anyone forge tokens).
+- **Set a strong `APP_PASSWORD`** — leaving it unset or at a known default logs
+  a loud warning; the UI is otherwise unprotected.
+- Notification/webhook targets are restricted from reaching cloud metadata /
+  link-local addresses; private LAN targets remain allowed.
+
+---
+
 ## Built with
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy, APScheduler, SQLCipher
