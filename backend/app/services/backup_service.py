@@ -348,7 +348,7 @@ class BackupService:
                 if j:
                     job_name = j.name
             except Exception:
-                pass
+                logger.debug("Could not resolve job name for job %d", job_id, exc_info=True)
 
             self._log(db, "error", job_name, f"Backup failed: {exc}")
             notification_service.notify_event("failure", job_name, str(exc))

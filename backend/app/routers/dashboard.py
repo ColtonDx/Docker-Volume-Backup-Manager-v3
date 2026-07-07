@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.triggers.cron import CronTrigger
@@ -9,6 +10,8 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import BackupJob, BackupRecord, LogEntry, StorageBackend, Schedule
 from app.schemas import DashboardStats
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -81,7 +84,7 @@ def get_dashboard(db: Session = Depends(get_db)):
                 if next_fire:
                     next_run = next_fire.isoformat()
         except Exception:
-            pass
+            logger.debug("Could not compute next run for cron %r", s.cron, exc_info=True)
 
         upcoming.append({
             "id": s.id,

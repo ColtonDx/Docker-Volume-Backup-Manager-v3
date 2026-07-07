@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import List
 
@@ -13,6 +14,8 @@ from app.schemas import BackupJobCreate, BackupJobOut, BackupJobUpdate, BackupRe
 from app.services.backup_service import backup_service
 from app.services.docker_service import docker_service
 from app.services.scheduler_service import scheduler_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -286,7 +289,7 @@ def get_job_stats(job_id: int, db: Session = Depends(get_db)):
                 if next_fire:
                     next_run = next_fire.isoformat()
         except Exception:
-            pass
+            logger.debug("Could not compute next run for cron %r", job.schedule.cron, exc_info=True)
         schedule_info = {
             "name": job.schedule.name,
             "cron": job.schedule.cron,
