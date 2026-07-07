@@ -162,6 +162,10 @@ app.include_router(settings_router.router, prefix="/api/settings", tags=["settin
 # ---- Serve built frontend (production) -----------------------------------
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 if STATIC_DIR.is_dir():
+    # Resolved absolute root used to contain every served path. Symlinks and
+    # ".." segments are collapsed by resolve() so containment can be checked.
+    _static_root = STATIC_DIR.resolve()
+
     # Serve static assets (JS, CSS, images) normally
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
@@ -171,8 +175,12 @@ if STATIC_DIR.is_dir():
 
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
-        # If a static file exists at the path, serve it (e.g. robots.txt, favicon)
-        static_file = STATIC_DIR / full_path
-        if full_path and static_file.is_file():
-            return FileResponse(static_file)
+        # If a real static file exists at the path, serve it (e.g. robots.txt,
+        # favicon). The resolved path MUST stay inside the static root — a raw
+        # request such as "GET /../secret" would otherwise escape the directory
+        # and read arbitrary files off the container (path traversal).
+        if full_path:
+            candidate = (_static_root / full_path).resolve()
+            if candidate.is_relative_to(_static_root) and candidate.is_file():
+                return FileResponse(candidate)
         return FileResponse(_index_html)
