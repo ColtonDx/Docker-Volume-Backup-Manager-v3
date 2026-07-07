@@ -56,6 +56,12 @@ services:
       # automatically migrated (backup saved as dvbm.db.plaintext.bak).
       # WARNING: if you lose or change this key the database becomes unreadable.
       # - DB_ENCRYPTION_KEY=replace-with-a-strong-random-passphrase
+      #
+      # Upgrading from a version that used the old key-derivation scheme? The
+      # app refuses to start on a legacy-encrypted DB until you opt in. Back up
+      # the data volume first, then set this to true for a one-time in-place
+      # re-encryption (a verified dvbm.db.prekdf.bak backup is kept):
+      # - MIGRATE_ENCRYPTED_DB=true
 
       # ── Allowed hosts / CORS ──────────────────────────────────────────────
       # Restrict which Host header values are accepted (default: any).

@@ -46,6 +46,13 @@ class Settings:
     # WARNING: losing this key makes the database permanently unreadable.
     DB_ENCRYPTION_KEY: str = os.getenv("DB_ENCRYPTION_KEY", "")
 
+    # Opt-in migration of databases encrypted with the legacy (unsalted
+    # single-SHA-256 raw key) scheme to the stronger native SQLCipher KDF.
+    # Left false, the app refuses to start on a legacy-encrypted DB so the
+    # operator can back up / roll back first. Set true to allow the one-time
+    # in-place re-encryption (a verified .prekdf.bak backup is kept).
+    MIGRATE_ENCRYPTED_DB: bool = os.getenv("MIGRATE_ENCRYPTED_DB", "false").lower() == "true"
+
     # Docker
     DOCKER_SOCKET: str = os.getenv("DOCKER_SOCKET", "unix:///var/run/docker.sock")
     DOCKER_LABEL_KEY: str = os.getenv("DOCKER_LABEL_KEY", "dvbm.job")
