@@ -22,6 +22,15 @@ def test_pragma_escaping():
     assert db._escape_pragma("plain") == "plain"
 
 
+def test_sidecar_keeps_full_db_name():
+    from pathlib import Path
+
+    p = Path("/data/dvbm.db")
+    # Backups sit next to the DB (persisted volume) and keep the full name.
+    assert db._sidecar(p, ".prekdf.bak") == Path("/data/dvbm.db.prekdf.bak")
+    assert db._sidecar(p, ".plaintext.bak") == Path("/data/dvbm.db.plaintext.bak")
+
+
 def test_iterdump_statements_uses_native_iterdump(tmp_path):
     import sqlite3
 

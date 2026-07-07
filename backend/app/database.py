@@ -125,6 +125,16 @@ def _iterdump_statements(conn) -> list[str]:
     return list(_iterdump(conn))
 
 
+def _sidecar(db_path: Path, suffix: str) -> Path:
+    """Path to a sidecar file next to the database, preserving the full DB name.
+
+    Unlike Path.with_suffix(), this keeps the original extension, so backups are
+    clearly named after the database (e.g. dvbm.db -> dvbm.db.prekdf.bak) and
+    land in the same directory (the persisted data volume by default).
+    """
+    return db_path.with_name(db_path.name + suffix)
+
+
 def _write_encrypted_from_dump(sql_statements, dest_path: Path, passphrase: str) -> None:
     """Create a new native-KDF encrypted DB at dest_path from SQL dump statements
     and verify it opens and is readable. Raises on any failure."""
@@ -163,7 +173,7 @@ def _migrate_plaintext_to_encrypted(db_path: Path, passphrase: str) -> None:
         # Already encrypted (or corrupt) — do not attempt migration.
         return
 
-    backup_path = db_path.with_suffix(".plaintext.bak")
+    backup_path = _sidecar(db_path, ".plaintext.bak")
     log.warning(
         "DB_ENCRYPTION_KEY is set but %s is a plaintext SQLite3 database. "
         "Migrating to SQLCipher encryption. Backup retained at: %s",
@@ -181,7 +191,7 @@ def _migrate_plaintext_to_encrypted(db_path: Path, passphrase: str) -> None:
     # Step 2: back up the original
     shutil.copy2(str(db_path), str(backup_path))
 
-    tmp_path = db_path.with_suffix(".encrypting_tmp")
+    tmp_path = _sidecar(db_path, ".encrypting_tmp")
     if tmp_path.exists():
         tmp_path.unlink()
 
@@ -216,7 +226,7 @@ def _migrate_legacy_kdf_to_new(db_path: Path, passphrase: str) -> None:
         "Legacy-encrypted database detected at %s; upgrading it to the native "
         "SQLCipher KDF. A verified pre-migration backup is kept at %s.",
         db_path,
-        db_path.with_suffix(".prekdf.bak"),
+        _sidecar(db_path, ".prekdf.bak"),
     )
 
     # Step 1: dump from the legacy-scheme DB
@@ -228,7 +238,7 @@ def _migrate_legacy_kdf_to_new(db_path: Path, passphrase: str) -> None:
     finally:
         src.close()
 
-    tmp_path = db_path.with_suffix(".rekey_tmp")
+    tmp_path = _sidecar(db_path, ".rekey_tmp")
     if tmp_path.exists():
         tmp_path.unlink()
 
@@ -237,7 +247,7 @@ def _migrate_legacy_kdf_to_new(db_path: Path, passphrase: str) -> None:
         _write_encrypted_from_dump(sql_statements, tmp_path, passphrase)
 
         # Step 3: back up the original, then Step 4: atomic replace
-        backup_path = db_path.with_suffix(".prekdf.bak")
+        backup_path = _sidecar(db_path, ".prekdf.bak")
         shutil.copy2(str(db_path), str(backup_path))
         tmp_path.replace(db_path)
         log.info("Encryption KDF migration complete. Pre-migration backup: %s", backup_path)
