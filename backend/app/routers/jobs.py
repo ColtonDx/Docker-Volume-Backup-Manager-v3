@@ -139,6 +139,8 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
 
 @router.post("", response_model=BackupJobOut, status_code=201)
 def create_job(body: BackupJobCreate, db: Session = Depends(get_db)):
+    if db.query(BackupJob).filter(BackupJob.name == body.name).first():
+        raise HTTPException(status_code=409, detail=f"A job named '{body.name}' already exists")
     job = BackupJob(
         name=body.name,
         label_key=body.label_key,
@@ -161,6 +163,9 @@ def update_job(job_id: int, body: BackupJobUpdate, db: Session = Depends(get_db)
     job = db.get(BackupJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    if body.name is not None and body.name != job.name:
+        if db.query(BackupJob).filter(BackupJob.name == body.name).first():
+            raise HTTPException(status_code=409, detail=f"A job named '{body.name}' already exists")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(job, field, value)
     db.commit()

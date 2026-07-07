@@ -52,6 +52,8 @@ class RotationService:
                 # Always keep at least min_backups
                 to_keep = max(policy.min_backups, 0)
                 kept = 0
+                deleted_age = 0
+                deleted_count = 0
                 to_delete: list[BackupRecord] = []
 
                 for rec in records:
@@ -60,15 +62,16 @@ class RotationService:
                         continue
                     # If max_backups is set and we're over, delete
                     if policy.max_backups and kept >= policy.max_backups:
-                        to_delete.append(rec)
+                        to_delete.append(("count", rec))
                         continue
                     # Delete if older than retention period
                     if rec.started_at and rec.started_at.replace(tzinfo=timezone.utc) < cutoff:
-                        to_delete.append(rec)
+                        to_delete.append(("age", rec))
                     else:
                         kept += 1
 
-                for rec in to_delete:
+                storage_errors = 0
+                for reason, rec in to_delete:
                     # Try to delete from storage
                     if rec.storage_path and job.storage:
                         try:
@@ -76,16 +79,43 @@ class RotationService:
                             storage_service.delete_remote(job.storage.type, config, rec.storage_path)
                         except Exception as exc:
                             logger.warning("Failed to delete remote file %s: %s", rec.storage_path, exc)
+                            storage_errors += 1
 
                     db.delete(rec)
+                    if reason == "age":
+                        deleted_age += 1
+                    else:
+                        deleted_count += 1
                     removed += 1
+
+                job_deleted = deleted_age + deleted_count
+                if job_deleted > 0:
+                    reasons: list[str] = []
+                    if deleted_age:
+                        reasons.append(f"{deleted_age} expired (older than {policy.retention_days}d)")
+                    if deleted_count:
+                        reasons.append(f"{deleted_count} over limit (max {policy.max_backups})")
+                    details = "; ".join(reasons)
+                    if storage_errors:
+                        details += f"; {storage_errors} storage delete(s) failed"
+                    db.add(LogEntry(
+                        level="info",
+                        job_name=job.name,
+                        message=f"Retention: removed {job_deleted} backup(s), {kept} remaining",
+                        details=details,
+                    ))
 
             if removed > 0:
                 db.add(LogEntry(
                     level="info",
                     job_name="System",
-                    message=f"Retention policy '{policy.name}' applied",
-                    details=f"Removed {removed} backup(s)",
+                    message=f"Retention policy '{policy.name}' complete: {removed} backup(s) removed across {len(jobs)} job(s)",
+                ))
+            else:
+                db.add(LogEntry(
+                    level="info",
+                    job_name="System",
+                    message=f"Retention policy '{policy.name}' ran: nothing to remove",
                 ))
             db.commit()
 
