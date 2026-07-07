@@ -176,8 +176,9 @@ class DockerService:
             bits, _stat = container.get_archive("/volume_data/.")
             raw = b"".join(bits)
 
+            from app.services.tar_utils import safe_extractall
             with tarfile.open(fileobj=io.BytesIO(raw), mode="r") as tar:
-                tar.extractall(path=out_path)
+                safe_extractall(tar, out_path)
 
             logger.info("Exported volume %s -> %s", volume_name, out_path)
             return out_path

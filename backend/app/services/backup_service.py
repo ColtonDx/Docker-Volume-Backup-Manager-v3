@@ -375,9 +375,10 @@ class BackupService:
 
             # 3. Extract archive and import into volumes via helper containers
             import tempfile
+            from app.services.tar_utils import safe_extractall
             with tempfile.TemporaryDirectory(prefix="bb_restore_") as work_dir:
                 with tarfile.open(str(local_archive), "r:gz") as tar:
-                    tar.extractall(path=work_dir)
+                    safe_extractall(tar, work_dir)
 
                 # Each top-level dir in the archive is a volume name
                 volume_names = [
