@@ -2,23 +2,19 @@ import app.database as db
 
 
 def test_plaintext_always_migrates():
-    assert db._decide_encrypted_action(True, "", False) == "plaintext_migrate"
-    assert db._decide_encrypted_action(True, "", True) == "plaintext_migrate"
+    assert db._decide_encrypted_action(True, "") == "plaintext_migrate"
 
 
 def test_new_scheme_ok():
-    assert db._decide_encrypted_action(False, "new", False) == "ok"
-    assert db._decide_encrypted_action(False, "new", True) == "ok"
+    assert db._decide_encrypted_action(False, "new") == "ok"
 
 
-def test_legacy_requires_optin():
-    assert db._decide_encrypted_action(False, "legacy", False) == "refuse"
-    assert db._decide_encrypted_action(False, "legacy", True) == "kdf_migrate"
+def test_legacy_migrates_automatically():
+    assert db._decide_encrypted_action(False, "legacy") == "kdf_migrate"
 
 
 def test_unknown_is_bad_key():
-    assert db._decide_encrypted_action(False, "unknown", False) == "bad_key"
-    assert db._decide_encrypted_action(False, "unknown", True) == "bad_key"
+    assert db._decide_encrypted_action(False, "unknown") == "bad_key"
 
 
 def test_pragma_escaping():

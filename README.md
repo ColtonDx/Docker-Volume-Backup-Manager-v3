@@ -159,14 +159,10 @@ services:
       # Encrypt the SQLite database on disk using AES-256 (SQLCipher).
       # If an existing plaintext database is found when this is first set,
       # it will be migrated automatically. A backup is saved as dvbm.db.plaintext.bak.
+      # A database encrypted by an older version (weaker key derivation) is also
+      # upgraded automatically, keeping a dvbm.db.prekdf.bak backup.
       # WARNING: if you lose this key, the database is permanently unreadable.
       # - DB_ENCRYPTION_KEY=replace-with-a-strong-passphrase
-
-      # Opt-in: re-encrypt a database created by an older version (weaker key
-      # derivation) with the current KDF. The app refuses to start on such a
-      # database until this is true. Back up first; a dvbm.db.prekdf.bak backup
-      # is kept. See the "Database encryption" section of the README.
-      # - MIGRATE_ENCRYPTED_DB=true
 
       # Comma-separated list of Host header values to accept.
       # Default is * (any). Restrict this if the app is publicly accessible.
@@ -650,12 +646,7 @@ Do not change the key after initial setup without a migration plan. The app will
 
 ### Upgrading a database encrypted by an older version
 
-Earlier versions derived the key with a weaker scheme (an unsalted single SHA-256). If the app detects a database encrypted that way, **it refuses to start** until you opt in to a one-time re-encryption, so you can back up or roll back first:
-
-1. Back up your `data` volume (or at least `dvbm.db`).
-2. Set `MIGRATE_ENCRYPTED_DB=true` and start the container.
-
-On startup the app re-encrypts the database with the stronger KDF using a dump-and-reload (it never mutates the original until a fully verified replacement exists) and keeps a `dvbm.db.prekdf.bak` backup. If any step fails, the original is left untouched. Once the migration has completed successfully you can remove `MIGRATE_ENCRYPTED_DB`.
+Earlier versions derived the key with a weaker scheme (an unsalted single SHA-256). If the app detects a database encrypted that way, it **upgrades it automatically** on startup — no configuration required. The re-encryption uses a dump-and-reload that never mutates the original until a fully verified replacement exists, and keeps a `dvbm.db.prekdf.bak` backup of the pre-migration database. If any step fails, the original is left untouched.
 
 If the database opens with neither the new nor the legacy scheme, the app stops with an error -- this usually means `DB_ENCRYPTION_KEY` does not match the key the database was created with.
 

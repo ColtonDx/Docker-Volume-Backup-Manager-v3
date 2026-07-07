@@ -84,17 +84,17 @@ def _detect_encrypted_scheme(db_path: Path, passphrase: str) -> str:
     return "unknown"
 
 
-def _decide_encrypted_action(is_plaintext: bool, scheme: str, migrate_flag: bool) -> str:
+def _decide_encrypted_action(is_plaintext: bool, scheme: str) -> str:
     """Pure decision helper (unit-testable) for how to handle an existing DB file.
 
-    Returns one of: 'plaintext_migrate', 'ok', 'kdf_migrate', 'refuse', 'bad_key'.
+    Returns one of: 'plaintext_migrate', 'ok', 'kdf_migrate', 'bad_key'.
     """
     if is_plaintext:
         return "plaintext_migrate"
     if scheme == "new":
         return "ok"
     if scheme == "legacy":
-        return "kdf_migrate" if migrate_flag else "refuse"
+        return "kdf_migrate"
     return "bad_key"
 
 
@@ -213,9 +213,8 @@ def _migrate_legacy_kdf_to_new(db_path: Path, passphrase: str) -> None:
     import sqlcipher3
 
     log.warning(
-        "MIGRATE_ENCRYPTED_DB=true: migrating legacy-encrypted database %s to the "
-        "native SQLCipher KDF. A backup will be kept at %s. Ensure you have your "
-        "own backup before proceeding.",
+        "Legacy-encrypted database detected at %s; upgrading it to the native "
+        "SQLCipher KDF. A verified pre-migration backup is kept at %s.",
         db_path,
         db_path.with_suffix(".prekdf.bak"),
     )
@@ -302,21 +301,15 @@ def _build_engine():
             is_plaintext = fh.read(16) == SQLITE_MAGIC
 
         scheme = "" if is_plaintext else _detect_encrypted_scheme(db_path, passphrase)
-        action = _decide_encrypted_action(is_plaintext, scheme, settings.MIGRATE_ENCRYPTED_DB)
+        action = _decide_encrypted_action(is_plaintext, scheme)
 
         if action == "plaintext_migrate":
             _migrate_plaintext_to_encrypted(db_path, passphrase)
         elif action == "kdf_migrate":
+            # Legacy-encrypted DBs are upgraded to the native KDF automatically.
+            # The migration keeps a verified .prekdf.bak backup and never mutates
+            # the original until a verified replacement exists.
             _migrate_legacy_kdf_to_new(db_path, passphrase)
-        elif action == "refuse":
-            raise RuntimeError(
-                f"The database at {db_path} is encrypted with the legacy "
-                "(unsalted SHA-256) key-derivation scheme, which is being "
-                "upgraded to SQLCipher's native KDF. Back up your data volume, "
-                "then set MIGRATE_ENCRYPTED_DB=true to perform a one-time in-place "
-                "re-encryption (a verified .prekdf.bak backup is kept). Refusing "
-                "to start so you can roll back if needed."
-            )
         elif action == "bad_key":
             raise RuntimeError(
                 f"The database at {db_path} could not be unlocked with the "
