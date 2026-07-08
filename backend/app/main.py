@@ -30,7 +30,8 @@ from app.services.scheduler_service import scheduler_service
 
 def _configure_syslog_on_startup() -> None:
     """Read syslog settings from DB and attach handler if enabled."""
-    import json, logging
+    import json
+    import logging
     _log = logging.getLogger(__name__)
     try:
         from app.database import SessionLocal
@@ -58,7 +59,8 @@ def _configure_syslog_on_startup() -> None:
 
 def _configure_timezone_on_startup() -> None:
     """Read the 'timezone' DB setting and apply it before the scheduler starts."""
-    import json, logging
+    import json
+    import logging
     _log = logging.getLogger(__name__)
     try:
         from app.database import SessionLocal
@@ -83,7 +85,8 @@ def _configure_timezone_on_startup() -> None:
 
 def _sync_rclone_config_on_startup() -> None:
     """Ensure the rclone config file is written to disk from DB settings."""
-    import json, logging
+    import json
+    import logging
     _log = logging.getLogger(__name__)
     try:
         from app.database import SessionLocal
@@ -112,6 +115,9 @@ def _sync_rclone_config_on_startup() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    # Defense in depth: enforce secret validation even if the app is launched
+    # directly via `uvicorn app.main:app` instead of start.py.
+    settings.validate_secrets()
     init_db()
     _configure_timezone_on_startup()
     _sync_rclone_config_on_startup()
@@ -128,11 +134,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS – origins from ALLOWED_ORIGINS env var (default: "*" for dev)
+# CORS – origins from ALLOWED_ORIGINS env var (default: "*" for dev).
+# allow_credentials is False: auth is a bearer token in the Authorization
+# header, not a cookie, so credentialed cross-origin requests aren't needed.
+# This also avoids the invalid/insecure "*" + credentials combination.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -159,9 +168,39 @@ app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 
+
+# ---- Health check (unauthenticated) --------------------------------------
+# Registered before the SPA catch-all so orchestrators/HEALTHCHECK can probe it.
+@app.get("/health", tags=["health"])
+async def health():
+    return {"status": "ok", "version": settings.APP_VERSION}
+
+
 # ---- Serve built frontend (production) -----------------------------------
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+def safe_static_file(root: Path, full_path: str) -> Path | None:
+    """Resolve *full_path* under *root*, returning the file only if it is a real
+    file contained inside *root*.
+
+    Prevents path traversal: a raw request such as "GET /../secret" would
+    otherwise escape the static directory and read arbitrary container files.
+    Returns None when the path is empty, escapes the root, or is not a file.
+    """
+    if not full_path:
+        return None
+    candidate = (root / full_path).resolve()
+    if candidate.is_relative_to(root) and candidate.is_file():
+        return candidate
+    return None
+
+
 if STATIC_DIR.is_dir():
+    # Resolved absolute root used to contain every served path. Symlinks and
+    # ".." segments are collapsed by resolve() so containment can be checked.
+    _static_root = STATIC_DIR.resolve()
+
     # Serve static assets (JS, CSS, images) normally
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
@@ -171,8 +210,9 @@ if STATIC_DIR.is_dir():
 
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
-        # If a static file exists at the path, serve it (e.g. robots.txt, favicon)
-        static_file = STATIC_DIR / full_path
-        if full_path and static_file.is_file():
+        # Serve a real static file (e.g. robots.txt, favicon) only if it stays
+        # inside the static root; otherwise fall back to the SPA entry point.
+        static_file = safe_static_file(_static_root, full_path)
+        if static_file is not None:
             return FileResponse(static_file)
         return FileResponse(_index_html)

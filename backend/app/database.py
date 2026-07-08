@@ -5,8 +5,8 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
 
 from app.config import settings
@@ -20,33 +20,143 @@ Base = declarative_base()
 # SQLCipher helpers
 # ---------------------------------------------------------------------------
 
+SQLITE_MAGIC = b"SQLite format 3\x00"
+
+# SQLCipher format the app writes. Pinning cipher_compatibility makes the
+# on-disk format independent of the linked SQLCipher library's default
+# (v3 vs v4), restoring version-portability while still using SQLCipher's
+# audited KDF (PBKDF2) for key stretching.
+_CIPHER_COMPATIBILITY = 4
+
+
 def _hex_key(passphrase: str) -> str:
     """
-    Derive a 32-byte (256-bit) hex key from an arbitrary passphrase via SHA-256.
+    Derive a 32-byte (256-bit) hex key from a passphrase via a single SHA-256.
 
-    Using the x'hex' PRAGMA form bypasses SQLCipher's KDF entirely, giving a
-    deterministic key that is independent of SQLCipher version defaults (v3 vs v4
-    changed KDF iterations and cipher settings).  This makes the database portable
-    across SQLCipher versions as long as the same passphrase is supplied.
+    LEGACY ONLY. This is the old key-derivation scheme (raw x'hex' key, which
+    bypasses SQLCipher's KDF). A single unsalted hash offers no key stretching,
+    so it is retained solely to open/migrate databases created by older
+    versions — new databases use the native SQLCipher KDF (see _apply_new_key).
     """
     return hashlib.sha256(passphrase.encode()).hexdigest()
 
 
-def _sqlcipher_creator(db_path: str, hex_key_val: str):
+def _escape_pragma(value: str) -> str:
+    """Escape a value for safe inclusion in a single-quoted PRAGMA statement."""
+    return value.replace("'", "''")
+
+
+def _apply_new_key(conn, passphrase: str) -> None:
+    """Unlock a connection with the native-KDF scheme (key then pinned compat)."""
+    conn.execute(f"PRAGMA key = '{_escape_pragma(passphrase)}'")
+    conn.execute(f"PRAGMA cipher_compatibility = {_CIPHER_COMPATIBILITY}")
+
+
+def _apply_legacy_key(conn, passphrase: str) -> None:
+    """Unlock a connection with the legacy raw-hex-key scheme."""
+    conn.execute(f"PRAGMA key = \"x'{_hex_key(passphrase)}'\"")
+
+
+def _opens_with(db_path: Path, passphrase: str, apply_key) -> bool:
+    """Return True if the DB file can be unlocked+read using apply_key."""
+    import sqlcipher3
+
+    conn = sqlcipher3.connect(str(db_path))
+    try:
+        apply_key(conn, passphrase)
+        conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _detect_encrypted_scheme(db_path: Path, passphrase: str) -> str:
+    """Classify an encrypted DB file: 'new', 'legacy', or 'unknown' (bad key)."""
+    if _opens_with(db_path, passphrase, _apply_new_key):
+        return "new"
+    if _opens_with(db_path, passphrase, _apply_legacy_key):
+        return "legacy"
+    return "unknown"
+
+
+def _decide_encrypted_action(is_plaintext: bool, scheme: str) -> str:
+    """Pure decision helper (unit-testable) for how to handle an existing DB file.
+
+    Returns one of: 'plaintext_migrate', 'ok', 'kdf_migrate', 'bad_key'.
+    """
+    if is_plaintext:
+        return "plaintext_migrate"
+    if scheme == "new":
+        return "ok"
+    if scheme == "legacy":
+        return "kdf_migrate"
+    return "bad_key"
+
+
+def _sqlcipher_creator(db_path: str, passphrase: str):
     """Return a DBAPI connection factory for use with SQLAlchemy's creator= arg."""
     import sqlcipher3
 
     def creator():
         conn = sqlcipher3.connect(db_path)
-        conn.execute(f"PRAGMA key = \"x'{hex_key_val}'\"")
+        _apply_new_key(conn, passphrase)
         return conn
 
     return creator
 
 
+def _iterdump_statements(conn) -> list[str]:
+    """Return a full SQL dump of *conn* as a list of statements.
+
+    stdlib sqlite3 connections provide conn.iterdump(); sqlcipher3 connections
+    do not, so fall back to the stdlib dump algorithm, which works on any
+    SQLite-compatible connection because it operates purely through the DBAPI
+    cursor and the SQL quote() function.
+    """
+    iterdump = getattr(conn, "iterdump", None)
+    if iterdump is not None:
+        return list(iterdump())
+    from sqlite3.dump import _iterdump
+    return list(_iterdump(conn))
+
+
+def _sidecar(db_path: Path, suffix: str) -> Path:
+    """Path to a sidecar file next to the database, preserving the full DB name.
+
+    Unlike Path.with_suffix(), this keeps the original extension, so backups are
+    clearly named after the database (e.g. dvbm.db -> dvbm.db.prekdf.bak) and
+    land in the same directory (the persisted data volume by default).
+    """
+    return db_path.with_name(db_path.name + suffix)
+
+
+def _write_encrypted_from_dump(sql_statements, dest_path: Path, passphrase: str) -> None:
+    """Create a new native-KDF encrypted DB at dest_path from SQL dump statements
+    and verify it opens and is readable. Raises on any failure."""
+    import sqlcipher3
+
+    enc_conn = sqlcipher3.connect(str(dest_path))
+    try:
+        _apply_new_key(enc_conn, passphrase)
+        for stmt in sql_statements:
+            enc_conn.execute(stmt)
+        enc_conn.commit()
+    finally:
+        enc_conn.close()
+
+    if not _opens_with(dest_path, passphrase, _apply_new_key):
+        raise RuntimeError(f"Verification failed: {dest_path} did not open with the new KDF")
+
+
 def _migrate_plaintext_to_encrypted(db_path: Path, passphrase: str) -> None:
     """
-    One-time migration: encrypt an existing plaintext SQLite database in place.
+    One-time migration: encrypt an existing plaintext SQLite database in place,
+    using the native SQLCipher KDF scheme.
 
     Steps:
       1. Verify the file has the SQLite3 magic header (not already encrypted).
@@ -56,9 +166,6 @@ def _migrate_plaintext_to_encrypted(db_path: Path, passphrase: str) -> None:
       5. Atomically replace the original file with the encrypted one.
       6. Keep the plaintext backup at <name>.plaintext.bak.
     """
-    import sqlcipher3
-
-    SQLITE_MAGIC = b"SQLite format 3\x00"
     with open(db_path, "rb") as fh:
         header = fh.read(16)
 
@@ -66,7 +173,7 @@ def _migrate_plaintext_to_encrypted(db_path: Path, passphrase: str) -> None:
         # Already encrypted (or corrupt) — do not attempt migration.
         return
 
-    backup_path = db_path.with_suffix(".plaintext.bak")
+    backup_path = _sidecar(db_path, ".plaintext.bak")
     log.warning(
         "DB_ENCRYPTION_KEY is set but %s is a plaintext SQLite3 database. "
         "Migrating to SQLCipher encryption. Backup retained at: %s",
@@ -77,38 +184,73 @@ def _migrate_plaintext_to_encrypted(db_path: Path, passphrase: str) -> None:
     # Step 1: read full SQL dump from the plaintext DB
     plain_conn = sqlite3.connect(str(db_path))
     try:
-        sql_statements = list(plain_conn.iterdump())
+        sql_statements = _iterdump_statements(plain_conn)
     finally:
         plain_conn.close()
 
     # Step 2: back up the original
     shutil.copy2(str(db_path), str(backup_path))
 
-    tmp_path = db_path.with_suffix(".encrypting_tmp")
-    hk = _hex_key(passphrase)
+    tmp_path = _sidecar(db_path, ".encrypting_tmp")
+    if tmp_path.exists():
+        tmp_path.unlink()
 
     try:
-        # Step 3: write encrypted DB
-        enc_conn = sqlcipher3.connect(str(tmp_path))
-        try:
-            enc_conn.execute(f"PRAGMA key = \"x'{hk}'\"")
-            for stmt in sql_statements:
-                enc_conn.execute(stmt)
-            enc_conn.commit()
-        finally:
-            enc_conn.close()
-
-        # Step 4: verify
-        verify_conn = sqlcipher3.connect(str(tmp_path))
-        try:
-            verify_conn.execute(f"PRAGMA key = \"x'{hk}'\"")
-            verify_conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
-        finally:
-            verify_conn.close()
-
+        # Steps 3 & 4: write + verify encrypted DB
+        _write_encrypted_from_dump(sql_statements, tmp_path, passphrase)
         # Step 5: atomic replace (POSIX guarantee: same filesystem)
         tmp_path.replace(db_path)
         log.info("Encryption migration complete. Plaintext backup: %s", backup_path)
+
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+
+
+def _migrate_legacy_kdf_to_new(db_path: Path, passphrase: str) -> None:
+    """
+    Re-encrypt a legacy (raw-hex-key) database with the native SQLCipher KDF.
+
+    Uses a dump-and-reload (not in-place PRAGMA rekey) so the original file is
+    never mutated until a fully-verified replacement exists:
+      1. Dump all SQL from the legacy-scheme DB.
+      2. Write + verify a new-scheme encrypted DB at a temp path.
+      3. Back up the original to <name>.prekdf.bak.
+      4. Atomically replace the original with the new-scheme DB.
+    On any failure the original file is left untouched.
+    """
+    import sqlcipher3
+
+    log.warning(
+        "Legacy-encrypted database detected at %s; upgrading it to the native "
+        "SQLCipher KDF. A verified pre-migration backup is kept at %s.",
+        db_path,
+        _sidecar(db_path, ".prekdf.bak"),
+    )
+
+    # Step 1: dump from the legacy-scheme DB
+    src = sqlcipher3.connect(str(db_path))
+    try:
+        _apply_legacy_key(src, passphrase)
+        src.execute("SELECT count(*) FROM sqlite_master").fetchone()  # confirm unlock
+        sql_statements = _iterdump_statements(src)
+    finally:
+        src.close()
+
+    tmp_path = _sidecar(db_path, ".rekey_tmp")
+    if tmp_path.exists():
+        tmp_path.unlink()
+
+    try:
+        # Steps 2: write + verify the new-scheme DB
+        _write_encrypted_from_dump(sql_statements, tmp_path, passphrase)
+
+        # Step 3: back up the original, then Step 4: atomic replace
+        backup_path = _sidecar(db_path, ".prekdf.bak")
+        shutil.copy2(str(db_path), str(backup_path))
+        tmp_path.replace(db_path)
+        log.info("Encryption KDF migration complete. Pre-migration backup: %s", backup_path)
 
     except Exception:
         if tmp_path.exists():
@@ -162,12 +304,32 @@ def _build_engine():
     db_path = settings.db_file_path
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Migrate from plaintext if the DB file already exists
+    # Decide how to handle an existing DB file (plaintext vs already-encrypted
+    # with the new or legacy scheme) before opening it.
     if db_path.exists():
-        _migrate_plaintext_to_encrypted(db_path, passphrase)
+        with open(db_path, "rb") as fh:
+            is_plaintext = fh.read(16) == SQLITE_MAGIC
 
-    hk = _hex_key(passphrase)
-    creator = _sqlcipher_creator(str(db_path), hk)
+        scheme = "" if is_plaintext else _detect_encrypted_scheme(db_path, passphrase)
+        action = _decide_encrypted_action(is_plaintext, scheme)
+
+        if action == "plaintext_migrate":
+            _migrate_plaintext_to_encrypted(db_path, passphrase)
+        elif action == "kdf_migrate":
+            # Legacy-encrypted DBs are upgraded to the native KDF automatically.
+            # The migration keeps a verified .prekdf.bak backup and never mutates
+            # the original until a verified replacement exists.
+            _migrate_legacy_kdf_to_new(db_path, passphrase)
+        elif action == "bad_key":
+            raise RuntimeError(
+                f"The database at {db_path} could not be unlocked with the "
+                "provided DB_ENCRYPTION_KEY (neither the new nor the legacy "
+                "scheme). Check that DB_ENCRYPTION_KEY matches the key the "
+                "database was created with."
+            )
+        # action == "ok": already new-scheme, nothing to do.
+
+    creator = _sqlcipher_creator(str(db_path), passphrase)
 
     # NullPool: every session checkout creates a fresh DBAPI connection so that
     # PRAGMA key is always the first statement issued — SQLCipher requires this.
@@ -180,6 +342,25 @@ def _build_engine():
 
 
 engine = _build_engine()
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_conn, connection_record) -> None:
+    """Enable WAL and a busy timeout on every connection.
+
+    WAL lets readers and a writer proceed concurrently, and busy_timeout makes a
+    connection wait for a lock instead of failing immediately with
+    "database is locked" — the background backup workers write while the API
+    reads. Runs after the (encrypted) creator's key PRAGMAs.
+    """
+    try:
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA busy_timeout=5000")
+        cur.close()
+    except Exception:
+        log.debug("Could not set SQLite pragmas", exc_info=True)
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

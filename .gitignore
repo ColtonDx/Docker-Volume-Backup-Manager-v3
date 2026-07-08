@@ -6,11 +6,24 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+docker-volume-backup-manager_logs.txt
 
 node_modules
 dist
 dist-ssr
 *.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Local databases / data
+*.db
+*.sqlite
+*.sqlite3
 
 # Local dev notes
 Review.md

@@ -38,6 +38,11 @@ COPY backend/app/ app/
 # Copy startup script (generates TLS cert if needed, then launches uvicorn)
 COPY backend/start.py .
 
+# Container healthcheck (probes /health over https self-signed, then http)
+COPY backend/healthcheck.py .
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["python", "healthcheck.py"]
+
 # Copy VERSION file for runtime version display
 COPY VERSION .
 

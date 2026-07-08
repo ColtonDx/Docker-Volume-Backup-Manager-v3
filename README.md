@@ -51,7 +51,16 @@ If a backup fails after containers have already been stopped, the containers are
 
 ```bash
 # Clone or download the repo, then edit docker-compose.yml:
-# Set APP_PASSWORD to something other than "changeme"
+#
+# 1. Set APP_PASSWORD to something other than "changeme".
+#
+# 2. Set JWT_SECRET to a strong random value. This is REQUIRED — the app
+#    refuses to start until it is set (a shared/default signing key would let
+#    anyone forge admin tokens). Generate one with:
+#
+#        openssl rand -hex 32
+#
+#    and paste the output after JWT_SECRET= in docker-compose.yml.
 
 docker compose up -d
 
@@ -60,6 +69,11 @@ docker compose up -d
 # Accept the self-signed certificate warning, or import /data/certs/cert.pem
 # into your OS or browser trust store.
 ```
+
+> If the container exits immediately and the logs repeat *"Refusing to start
+> with an insecure signing key"*, `JWT_SECRET` is not set. Set it (see above)
+> and the container will start. The repetition is just the `restart` policy
+> retrying the failed start.
 
 ---
 
@@ -107,12 +121,14 @@ services:
       # - ~/.config/rclone:/root/.config/rclone:ro
 
     environment:
-      # Login password for the web UI. Change this.
+      # Login password for the web UI. Change this. Leaving it unset or at a
+      # well-known default (admin/changeme/password) logs a loud warning.
       - APP_PASSWORD=changeme
 
-      # Signs JWT session tokens. Use a long random string in production.
-      # If not set, a hardcoded default is used (insecure).
-      # - JWT_SECRET=replace-with-something-random
+      # REQUIRED: signs JWT session tokens. The app refuses to start until this
+      # is set to a strong random value (a shared/default key would let anyone
+      # forge admin tokens). Generate one with: openssl rand -hex 32
+      - JWT_SECRET=
 
       # How long a login session lasts, in hours. Default: 24.
       # - JWT_EXPIRE_HOURS=24
@@ -143,6 +159,8 @@ services:
       # Encrypt the SQLite database on disk using AES-256 (SQLCipher).
       # If an existing plaintext database is found when this is first set,
       # it will be migrated automatically. A backup is saved as dvbm.db.plaintext.bak.
+      # A database encrypted by an older version (weaker key derivation) is also
+      # upgraded automatically, keeping a dvbm.db.prekdf.bak backup.
       # WARNING: if you lose this key, the database is permanently unreadable.
       # - DB_ENCRYPTION_KEY=replace-with-a-strong-passphrase
 
@@ -618,13 +636,67 @@ environment:
 
 ## Database encryption
 
-Setting `DB_ENCRYPTION_KEY` encrypts the SQLite database on disk using AES-256 via SQLCipher. The app handles the encryption transparently -- no changes needed elsewhere.
+Setting `DB_ENCRYPTION_KEY` encrypts the SQLite database on disk using AES-256 via SQLCipher. The key is stretched with SQLCipher's native KDF (PBKDF2), and the on-disk format is pinned (`cipher_compatibility = 4`) so it stays portable across SQLCipher library versions. The app handles the encryption transparently -- no changes needed elsewhere.
 
-If you set `DB_ENCRYPTION_KEY` when an existing plaintext database is already present, the app migrates it to encrypted format on startup. A copy of the original is saved as `dvbm.db.plaintext.bak`.
+If you set `DB_ENCRYPTION_KEY` when an existing **plaintext** database is already present, the app migrates it to encrypted format on startup. A copy of the original is saved as `dvbm.db.plaintext.bak`.
 
 If you lose the key, the database cannot be recovered. There is no way to decrypt it without the original key.
 
 Do not change the key after initial setup without a migration plan. The app will fail to open the database if the key does not match.
+
+### Upgrading a database encrypted by an older version
+
+Earlier versions derived the key with a weaker scheme (an unsalted single SHA-256). If the app detects a database encrypted that way, it **upgrades it automatically** on startup — no configuration required. The re-encryption uses a dump-and-reload that never mutates the original until a fully verified replacement exists, and keeps a `dvbm.db.prekdf.bak` backup of the pre-migration database. If any step fails, the original is left untouched.
+
+If the database opens with neither the new nor the legacy scheme, the app stops with an error -- this usually means `DB_ENCRYPTION_KEY` does not match the key the database was created with.
+
+---
+
+## Security
+
+### Docker socket access
+
+This app manages your containers, so it needs the Docker socket
+(`/var/run/docker.sock`). **Mounting the Docker socket grants control of the
+Docker daemon, which is equivalent to root on the host.** The container runs as
+root so that socket access works consistently across hosts (the socket's group
+ownership varies between distributions).
+
+To reduce this exposure, put a **Docker socket proxy** in front of the daemon
+and grant only the API calls this app uses (list/inspect/start/stop containers,
+volume and image operations) instead of mounting the raw socket. For example
+using [`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy):
+
+```yaml
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - VOLUMES=1
+      - POST=1          # required to start/stop containers
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  docker-volume-backup-manager:
+    # ...
+    environment:
+      - DOCKER_SOCKET=tcp://docker-socket-proxy:2375
+    # and remove the direct - /var/run/docker.sock:/var/run/docker.sock mount
+```
+
+Keep the app on a trusted network and behind authentication regardless.
+
+### Other hardening
+
+- **`JWT_SECRET` is required** — the app refuses to start without a strong,
+  unique value (a shared/default signing key would let anyone forge tokens).
+- **Set a strong `APP_PASSWORD`** — leaving it unset or at a known default logs
+  a loud warning; the UI is otherwise unprotected.
+- Notification/webhook targets are restricted from reaching cloud metadata /
+  link-local addresses; private LAN targets remain allowed.
 
 ---
 

@@ -6,7 +6,11 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Required: Docker socket so we can manage containers
+      # Required: Docker socket so we can manage containers.
+      # WARNING: access to the Docker socket is equivalent to root on the host.
+      # To limit exposure, front the daemon with a docker-socket-proxy and set
+      # DOCKER_SOCKET=tcp://<proxy>:2375 instead of mounting the raw socket.
+      # See the "Security" section of the README.
       - /var/run/docker.sock:/var/run/docker.sock
       # Persistent data (SQLite database + auto-generated TLS certs)
       - data:/data
@@ -17,14 +21,19 @@ services:
       # Optional: mount your rclone config
       # - ~/.config/rclone:/root/.config/rclone:ro
     environment:
-      # REQUIRED: Set a password for the web UI
+      # REQUIRED: Set a strong, unique password for the web UI.
+      # Leaving this unset or at a well-known default (admin/changeme/password)
+      # logs a loud security warning on startup — the UI would be unprotected.
       - APP_PASSWORD=changeme
+
+      # REQUIRED: signing key for auth tokens. The app refuses to start until
+      # this is set to a strong random value (a public/default key would let
+      # anyone forge admin tokens). Generate one with:
+      #     openssl rand -hex 32
+      - JWT_SECRET=
 
       # Optional: custom instance name shown in the sidebar
       # - APP_NAME=Docker Volume Backup Manager
-
-      # Optional: custom JWT secret (strongly recommended in production)
-      # - JWT_SECRET=my-super-secret-key
 
       # Optional: Docker label key to match jobs to containers
       # - DOCKER_LABEL_KEY=dvbm.job
@@ -50,6 +59,9 @@ services:
       # On first start with this key, an existing plaintext database is
       # automatically migrated (backup saved as dvbm.db.plaintext.bak).
       # WARNING: if you lose or change this key the database becomes unreadable.
+      # A database encrypted by an older version (weaker key derivation) is
+      # upgraded to the current KDF automatically on startup, keeping a verified
+      # dvbm.db.prekdf.bak backup.
       # - DB_ENCRYPTION_KEY=replace-with-a-strong-random-passphrase
 
       # ── Allowed hosts / CORS ──────────────────────────────────────────────

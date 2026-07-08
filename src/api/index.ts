@@ -40,7 +40,14 @@ export async function login(password: string): Promise<string> {
   return res.token;
 }
 
-export function logout() {
+export async function logout() {
+  // Revoke server-side (invalidates all tokens) while the token is still set,
+  // then clear it locally. Best-effort: still clear even if the request fails.
+  try {
+    await api.post("/auth/logout");
+  } catch {
+    // ignore – log out locally regardless
+  }
   setToken(null);
 }
 
