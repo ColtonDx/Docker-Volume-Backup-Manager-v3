@@ -18,47 +18,32 @@
 #
 #     docker compose -f docker-compose.yml up
 #
-# ── DOCKER_GID ────────────────────────────────────────────────────────────────
-# The container runs as a non-root user that must be in a group matching the
-# host's docker group, or it cannot read the mounted socket and every Docker
-# operation fails. Set it once per machine:
-#
-#     echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" > .env
-#
-# Compose reads .env automatically. 999 is the common default and is used when
-# the variable is unset.
-
 services:
   docker-volume-backup-manager:
     build:
       context: .
-      args:
-        DOCKER_GID: ${DOCKER_GID:-999}
     # Distinguish locally built images from the published ones in `docker images`.
     image: docker-volume-backup-manager-v3:local
     environment:
       # ── Dev convenience: stable credentials across `docker compose down -v` ──
       #
-      # Both read from .env, which is gitignored. Nothing secret is committed,
-      # and both fall back to the safe production behaviour when unset:
-      # APP_PASSWORD keeps the value from docker-compose.yml, and an empty
-      # JWT_SECRET makes the app generate a random one and persist it to
-      # /data/jwt_secret.
-      #
-      # Setting JWT_SECRET pins the token signing key so you stay logged in
-      # after wiping the data volume. Generate your own — never share one
-      # between machines, and never move a dev value to a real deployment:
+      # Both read from .env, which is gitignored, so nothing secret is committed.
+      # The app refuses to start without a JWT_SECRET, so generate one before
+      # the first run:
       #
       #     {
-      #       echo "DOCKER_GID=$(getent group docker | cut -d: -f3)"
       #       echo "JWT_SECRET=$(openssl rand -base64 32)"
       #       echo "APP_PASSWORD=pick-something"
       #     } > .env
       #
+      # Pinning JWT_SECRET also keeps you logged in across
+      # `docker compose down -v`, which would otherwise wipe the data volume.
+      #
       # A value committed here would be public in git and would sign valid
-      # admin tokens for every checkout of this repo, which is the exact
-      # vulnerability the generated-secret behaviour exists to prevent.
-      - JWT_SECRET=${JWT_SECRET:-}
+      # admin tokens for every checkout of this repo — the exact vulnerability
+      # the startup check exists to prevent. Generate your own, and never carry
+      # a dev value into a real deployment.
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env — see the comment above}
       - APP_PASSWORD=${APP_PASSWORD:-changeme}
 
     # A source build is for development, so surface application logs rather
