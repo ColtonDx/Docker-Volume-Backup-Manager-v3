@@ -18,6 +18,16 @@ export const REFRESH_OPTIONS: RefreshOption[] = [
 
 const STORAGE_KEY = "dvbm-auto-refresh";
 
+// Query keys whose data changes without user action, and so are worth
+// refreshing on a timer.
+const LIVE_QUERY_KEYS = new Set([
+  "jobs",
+  "dashboard",
+  "backups",
+  "logs",
+  "job-stats",
+]);
+
 interface AutoRefreshContextValue {
   interval: RefreshInterval;
   setInterval: (v: RefreshInterval) => void;
@@ -49,7 +59,15 @@ export function AutoRefreshProvider({ children }: { children: ReactNode }) {
     if (interval === 0) return;
 
     const id = window.setInterval(() => {
-      queryClient.invalidateQueries();
+      // Skip refreshes while the tab is hidden — a forgotten tab otherwise
+      // keeps polling the Docker daemon indefinitely.
+      if (document.hidden) return;
+      // Only refresh data that actually changes on its own. Calling
+      // invalidateQueries() with no filter also refetched settings, storages,
+      // schedules and notifications on every tick.
+      queryClient.invalidateQueries({
+        predicate: (query) => LIVE_QUERY_KEYS.has(String(query.queryKey[0])),
+      });
     }, interval * 1000);
 
     return () => window.clearInterval(id);

@@ -7,11 +7,16 @@ that trigger backups at the configured times.
 from __future__ import annotations
 
 import logging
+import os
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 logger = logging.getLogger(__name__)
+
+# How late a missed run may still fire (seconds). Covers a short outage or a
+# restart around the scheduled time rather than skipping the run entirely.
+_MISFIRE_GRACE_SECONDS = int(os.getenv("MISFIRE_GRACE_SECONDS", "3600"))
 
 
 class SchedulerService:
@@ -27,6 +32,22 @@ class SchedulerService:
         if stripped.upper() == "UTC":
             return "UTC"
         return stripped
+
+    @staticmethod
+    def _validate_tz(tz: str) -> str:
+        """Return *tz* if zoneinfo can load it, else raise ValueError.
+
+        Checked before the running scheduler is touched: shutting it down and
+        then failing to build the replacement left the app with no scheduler
+        at all until the process was restarted.
+        """
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(tz)
+        except (ZoneInfoNotFoundError, ValueError, KeyError) as exc:
+            raise ValueError(f"Unknown timezone '{tz}': {exc}") from exc
+        return tz
 
     def start(self) -> None:
         """Start the scheduler and sync jobs from the database."""
@@ -47,6 +68,8 @@ class SchedulerService:
         """Restart the scheduler with a new timezone and re-sync all jobs."""
         from app.config import settings
         tz = self._normalise_tz(tz)
+        # Validate first: a bad value must not take the running scheduler down.
+        self._validate_tz(tz)
         was_running = self._scheduler and self._scheduler.running
         if was_running:
             self._scheduler.shutdown(wait=False)
@@ -97,6 +120,9 @@ class SchedulerService:
                         # If a trigger was missed while the job was running, run it
                         # once when it's free rather than queuing up every missed fire.
                         coalesce=True,
+                        # Without this APScheduler's 1-second default silently
+                        # drops any run missed while the host was down.
+                        misfire_grace_time=_MISFIRE_GRACE_SECONDS,
                     )
                     logger.info(
                         "Scheduled job '%s' (id=%d) with cron '%s'",
@@ -112,6 +138,81 @@ class SchedulerService:
                 self._sync_config_backup(db)
             except Exception as exc:
                 logger.error("Failed to sync config backup job: %s", exc)
+
+            # Daily log pruning — enforces the log_retention_* settings, which
+            # previously existed in the UI but were never acted on.
+            try:
+                self._scheduler.add_job(  # type: ignore[union-attr]
+                    self._prune_logs,
+                    trigger=CronTrigger(hour=3, minute=30),
+                    id="dvbm-log-retention",
+                    replace_existing=True,
+                    name="log-retention",
+                    max_instances=1,
+                    coalesce=True,
+                    misfire_grace_time=_MISFIRE_GRACE_SECONDS,
+                )
+            except Exception as exc:
+                logger.error("Failed to register log retention job: %s", exc)
+        finally:
+            db.close()
+
+    @staticmethod
+    def _prune_logs() -> None:
+        """Delete log entries older than the configured retention windows."""
+        import json
+        from datetime import datetime, timedelta, timezone
+
+        from app.database import SessionLocal
+        from app.models import LogEntry, Setting
+
+        db = SessionLocal()
+        try:
+            def _get(key, default):
+                row = db.get(Setting, key)
+                if row is None or row.value is None:
+                    return default
+                try:
+                    return json.loads(row.value)
+                except (json.JSONDecodeError, TypeError):
+                    return default
+
+            backup_days = int(_get("log_retention_backup_days", 30) or 0)
+            system_days = int(_get("log_retention_system_days", 14) or 0)
+            now = datetime.now(timezone.utc)
+            removed = 0
+
+            if system_days > 0:
+                cutoff = now - timedelta(days=system_days)
+                removed += (
+                    db.query(LogEntry)
+                    .filter(LogEntry.job_name == "System", LogEntry.created_at < cutoff)
+                    .delete(synchronize_session=False)
+                )
+
+            if backup_days > 0:
+                cutoff = now - timedelta(days=backup_days)
+                removed += (
+                    db.query(LogEntry)
+                    .filter(LogEntry.job_name != "System", LogEntry.created_at < cutoff)
+                    .delete(synchronize_session=False)
+                )
+
+            if removed:
+                db.add(LogEntry(
+                    level="info",
+                    job_name="System",
+                    message=f"Log retention: removed {removed} old log entr(ies)",
+                    details=(
+                        f"Backup logs older than {backup_days}d, "
+                        f"system logs older than {system_days}d"
+                    ),
+                ))
+            db.commit()
+            logger.info("Log retention pruned %d entries", removed)
+        except Exception as exc:
+            logger.error("Log retention pruning failed: %s", exc)
+            db.rollback()
         finally:
             db.close()
 
@@ -159,6 +260,7 @@ class SchedulerService:
                 name="dvbm-config-backup",
                 max_instances=1,
                 coalesce=True,
+                misfire_grace_time=_MISFIRE_GRACE_SECONDS,
             )
             logger.info("Config backup scheduled with cron '%s'", schedule.cron)
         except Exception as exc:

@@ -6,7 +6,43 @@ import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
+
+
+def _validate_cron(value: str) -> str:
+    """Reject cron expressions APScheduler cannot parse.
+
+    An invalid expression previously saved fine and then failed silently at
+    schedule time, so the job simply never fired.
+    """
+    from apscheduler.triggers.cron import CronTrigger
+
+    parts = (value or "").split()
+    if len(parts) != 5:
+        raise ValueError(
+            "Cron expression must have 5 fields (minute hour day month day_of_week)"
+        )
+    try:
+        CronTrigger(
+            minute=parts[0], hour=parts[1], day=parts[2],
+            month=parts[3], day_of_week=parts[4],
+        )
+    except Exception as exc:
+        raise ValueError(f"Invalid cron expression: {exc}") from exc
+    return value
+
+
+def _validate_safe_name(value: str) -> str:
+    """Names end up in archive filenames, so keep them path-safe."""
+    import re
+
+    if not value or not value.strip():
+        raise ValueError("Name must not be empty")
+    if not re.fullmatch(r"[A-Za-z0-9 ._-]+", value):
+        raise ValueError(
+            "Name may only contain letters, numbers, spaces, dots, hyphens and underscores"
+        )
+    return value.strip()
 
 
 # ---- Auth ----------------------------------------------------------------
@@ -75,6 +111,11 @@ class ScheduleBase(BaseModel):
     description: str | None = None
     enabled: bool = True
 
+    @field_validator("cron")
+    @classmethod
+    def _check_cron(cls, v: str) -> str:
+        return _validate_cron(v)
+
 
 class ScheduleCreate(ScheduleBase):
     pass
@@ -85,6 +126,11 @@ class ScheduleUpdate(BaseModel):
     cron: str | None = None
     description: str | None = None
     enabled: bool | None = None
+
+    @field_validator("cron")
+    @classmethod
+    def _check_cron(cls, v: str | None) -> str | None:
+        return _validate_cron(v) if v is not None else v
 
 
 class ScheduleOut(ScheduleBase):
@@ -103,8 +149,22 @@ class RetentionPolicyBase(BaseModel):
     name: str
     description: str | None = None
     retention_days: int
+    # Floor of 1: a policy must never be able to delete a job's last backup.
     min_backups: int = 1
     max_backups: int | None = None
+
+    @field_validator("min_backups")
+    @classmethod
+    def _min_backups_floor(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("min_backups must be at least 1")
+        return v
+
+    @model_validator(mode="after")
+    def _max_not_below_min(self):
+        if self.max_backups is not None and self.max_backups < self.min_backups:
+            raise ValueError("max_backups must be greater than or equal to min_backups")
+        return self
 
 
 class RetentionPolicyCreate(RetentionPolicyBase):
@@ -117,6 +177,13 @@ class RetentionPolicyUpdate(BaseModel):
     retention_days: int | None = None
     min_backups: int | None = None
     max_backups: int | None = None
+
+    @field_validator("min_backups")
+    @classmethod
+    def _min_backups_floor(cls, v: int | None) -> int | None:
+        if v is not None and v < 1:
+            raise ValueError("min_backups must be at least 1")
+        return v
 
 
 class RetentionPolicyOut(RetentionPolicyBase):
@@ -141,6 +208,13 @@ class BackupJobBase(BaseModel):
     enabled: bool = True
     timeout_seconds: int | None = None  # None = use JOB_TIMEOUT_SECONDS global default
 
+    # The job name becomes part of the archive filename, so "/" or ".." in it
+    # would steer where the upload lands.
+    @field_validator("name")
+    @classmethod
+    def _check_name(cls, v: str) -> str:
+        return _validate_safe_name(v)
+
 
 class BackupJobCreate(BackupJobBase):
     pass
@@ -155,6 +229,11 @@ class BackupJobUpdate(BaseModel):
     retention_id: int | None = None
     enabled: bool | None = None
     timeout_seconds: int | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _check_name(cls, v: str | None) -> str | None:
+        return _validate_safe_name(v) if v is not None else v
 
 
 class BackupJobOut(BaseModel):

@@ -10,10 +10,13 @@ Communicates with the Docker daemon via the Docker SDK to:
 
 from __future__ import annotations
 
-import io
 import logging
 import os
+import shutil
 import tarfile
+import tempfile
+import threading
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -22,8 +25,15 @@ logger = logging.getLogger(__name__)
 class DockerService:
     """Wrapper around the Docker SDK client."""
 
+    # Short TTL cache for the container listing. GET /api/jobs calls this on
+    # every request and several pages poll that endpoint, so without a cache
+    # each poll is a full list-with-attrs against the daemon.
+    _LIST_CACHE_TTL = 3.0
+
     def __init__(self) -> None:
         self._client = None
+        self._list_cache: tuple[float, list[dict[str, Any]]] | None = None
+        self._list_lock = threading.Lock()
 
     @property
     def client(self):
@@ -40,15 +50,32 @@ class DockerService:
     # ------------------------------------------------------------------
 
     def list_containers(self, all: bool = True) -> list[dict[str, Any]]:
-        """Return simplified container info dicts."""
+        """Return simplified container info dicts (cached for _LIST_CACHE_TTL)."""
         if not self.client:
             return []
+
+        if all:
+            with self._list_lock:
+                cached = self._list_cache
+                if cached and (time.monotonic() - cached[0]) < self._LIST_CACHE_TTL:
+                    return cached[1]
+
         try:
             containers = self.client.containers.list(all=all)
-            return [self._container_to_dict(c) for c in containers]
+            result = [self._container_to_dict(c) for c in containers]
         except Exception as exc:
             logger.error("Failed to list containers: %s", exc)
             return []
+
+        if all:
+            with self._list_lock:
+                self._list_cache = (time.monotonic(), result)
+        return result
+
+    def invalidate_container_cache(self) -> None:
+        """Drop the cached listing after an operation that changes container state."""
+        with self._list_lock:
+            self._list_cache = None
 
     def find_containers_by_label(self, label_key: str, label_value: str) -> list[dict[str, Any]]:
         """Find containers with a specific label key=value."""
@@ -65,8 +92,14 @@ class DockerService:
             return []
 
     def stop_containers(self, container_ids: list[str], timeout: int = 30) -> list[str]:
-        """Stop containers by ID. Returns list of successfully stopped IDs."""
-        stopped = []
+        """Stop containers by ID. Returns list of successfully stopped IDs.
+
+        Raises RuntimeError if any container could not be stopped: backing up a
+        volume while its container is still writing to it produces an archive
+        that typically restores as a corrupt database.
+        """
+        stopped: list[str] = []
+        failed: list[str] = []
         if not self.client:
             return stopped
         for cid in container_ids:
@@ -78,6 +111,17 @@ class DockerService:
                     logger.info("Stopped container %s", cid)
             except Exception as exc:
                 logger.error("Failed to stop container %s: %s", cid, exc)
+                failed.append(cid)
+        self.invalidate_container_cache()
+        if failed:
+            # Restart whatever we already stopped so we do not leave the user's
+            # containers down after aborting.
+            if stopped:
+                self.start_containers(stopped)
+            raise RuntimeError(
+                f"Could not stop container(s): {', '.join(failed)}. "
+                "Aborting to avoid taking a backup of live, in-use volumes."
+            )
         return stopped
 
     def start_containers(self, container_ids: list[str]) -> list[str]:
@@ -94,6 +138,7 @@ class DockerService:
                     logger.info("Started container %s", cid)
             except Exception as exc:
                 logger.error("Failed to start container %s: %s", cid, exc)
+        self.invalidate_container_cache()
         return started
 
     def get_container_volumes(self, container_id: str) -> list[dict[str, str]]:
@@ -174,17 +219,27 @@ class DockerService:
             # get_archive streams a tar of /volume_data/.  The paths
             # inside the tar start with "volume_data/…".
             bits, _stat = container.get_archive("/volume_data/.")
-            raw = b"".join(bits)
-
+            # Spool the stream to disk rather than joining it in memory: a
+            # multi-GB volume would otherwise be held in RAM twice over.
             from app.services.tar_utils import safe_extractall
-            with tarfile.open(fileobj=io.BytesIO(raw), mode="r") as tar:
-                safe_extractall(tar, out_path)
+            with tempfile.NamedTemporaryFile(
+                dir=dest_dir, prefix=".export_", suffix=".tar"
+            ) as spool:
+                for chunk in bits:
+                    spool.write(chunk)
+                spool.flush()
+                spool.seek(0)
+                with tarfile.open(fileobj=spool, mode="r") as tar:
+                    safe_extractall(tar, out_path)
 
             logger.info("Exported volume %s -> %s", volume_name, out_path)
             return out_path
 
         except Exception as exc:
             logger.error("Failed to export volume %s: %s", volume_name, exc)
+            # Remove the directory created up front, otherwise a failed export
+            # is indistinguishable from a backup of a genuinely empty volume.
+            shutil.rmtree(out_path, ignore_errors=True)
             return None
         finally:
             if container:
@@ -207,33 +262,37 @@ class DockerService:
         try:
             self._ensure_helper_image()
 
-            # Clear existing volume data with a disposable container
-            self.client.containers.run(
-                self.HELPER_IMAGE,
-                command=["sh", "-c", "rm -rf /volume_data/* /volume_data/.[!.]* 2>/dev/null; true"],
-                volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
-                remove=True,
-            )
+            # Build the tar BEFORE clearing the volume. If archive creation
+            # fails we must not have destroyed the existing data already.
+            # Spooled to disk so a large volume does not sit in RAM twice.
+            with tempfile.NamedTemporaryFile(prefix=".import_", suffix=".tar") as spool:
+                with tarfile.open(fileobj=spool, mode="w") as tar:
+                    for entry in os.listdir(source_dir):
+                        full = os.path.join(source_dir, entry)
+                        tar.add(full, arcname=entry)
+                spool.flush()
+                spool.seek(0)
 
-            # Create (don't start) a helper container with the volume mounted.
-            # Keeping the container in "created" state ensures the volume
-            # mount is active for put_archive (same pattern as export_volume).
-            container = self.client.containers.create(
-                self.HELPER_IMAGE,
-                command="true",
-                volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
-            )
+                # Clear existing volume data with a disposable container
+                self.client.containers.run(
+                    self.HELPER_IMAGE,
+                    command=["sh", "-c", "rm -rf /volume_data/* /volume_data/.[!.]* 2>/dev/null; true"],
+                    volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
+                    remove=True,
+                )
 
-            # Build a tar of the source directory contents
-            buf = io.BytesIO()
-            with tarfile.open(fileobj=buf, mode="w") as tar:
-                for entry in os.listdir(source_dir):
-                    full = os.path.join(source_dir, entry)
-                    tar.add(full, arcname=entry)
-            buf.seek(0)
+                # Create (don't start) a helper container with the volume mounted.
+                # Keeping the container in "created" state ensures the volume
+                # mount is active for put_archive (same pattern as export_volume).
+                container = self.client.containers.create(
+                    self.HELPER_IMAGE,
+                    command="true",
+                    volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
+                )
 
-            # Upload into the volume via the helper container
-            container.put_archive("/volume_data", buf.getvalue())
+                # Upload into the volume via the helper container. Passing the
+                # file object streams it instead of copying it into memory.
+                container.put_archive("/volume_data", spool)
 
             # Verify data was written by checking the volume
             verify = self.client.containers.run(

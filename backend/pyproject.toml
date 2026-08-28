@@ -13,3 +13,14 @@ extend-ignore = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: requires a running Docker daemon",
+    "slow: noticeably slower than the rest of the suite",
+]
+# No test should ever hang the run; the integration tests that start containers
+# are the realistic worst case and finish well inside this.
+timeout = 180
+filterwarnings = [
+    "ignore::DeprecationWarning:pydantic.*",
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]

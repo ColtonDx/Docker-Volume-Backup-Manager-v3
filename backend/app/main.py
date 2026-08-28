@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -112,6 +112,93 @@ def _sync_rclone_config_on_startup() -> None:
         _log.warning("Could not sync rclone config on startup: %s", exc)
 
 
+def _recover_interrupted_jobs() -> None:
+    """Clean up jobs that were running when the process last stopped.
+
+    A record left in "running" is otherwise reported as an active job forever,
+    and the containers it stopped are never restarted.
+    """
+    import json, logging
+    _log = logging.getLogger(__name__)
+    try:
+        from datetime import datetime, timezone
+
+        from app.database import SessionLocal
+        from app.models import BackupRecord, LogEntry
+        from app.services.docker_service import docker_service
+
+        db = SessionLocal()
+        try:
+            stale = db.query(BackupRecord).filter(BackupRecord.status == "running").all()
+            if not stale:
+                return
+
+            for record in stale:
+                record.status = "error"
+                record.error_message = "Interrupted by application restart"
+                record.completed_at = datetime.now(timezone.utc)
+
+                job_name = record.job.name if record.job else "unknown"
+                try:
+                    names = json.loads(record.containers_stopped or "[]")
+                except (json.JSONDecodeError, TypeError):
+                    names = []
+
+                if names:
+                    try:
+                        by_name = {c["name"]: c["id"] for c in docker_service.list_containers(all=True)}
+                        ids = [by_name[n] for n in names if n in by_name]
+                        started = docker_service.start_containers(ids)
+                        _log.info(
+                            "Restarted %d container(s) left stopped by interrupted job '%s'",
+                            len(started), job_name,
+                        )
+                    except Exception as exc:
+                        _log.error("Could not restart containers for '%s': %s", job_name, exc)
+
+                db.add(LogEntry(
+                    level="warning",
+                    job_name=job_name,
+                    message="Job was interrupted by an application restart",
+                    details=(
+                        f"Containers restored: {', '.join(names)}" if names
+                        else "No containers were recorded as stopped"
+                    ),
+                ))
+
+            db.commit()
+            _log.warning("Marked %d interrupted job(s) as failed on startup", len(stale))
+        finally:
+            db.close()
+    except Exception as exc:
+        _log.warning("Interrupted-job recovery failed: %s", exc)
+
+
+def _sweep_backup_temp_dir() -> None:
+    """Remove archives left behind by an interrupted or failed run."""
+    import logging, shutil
+    _log = logging.getLogger(__name__)
+    try:
+        temp_dir = settings.BACKUP_TEMP_DIR
+        if not temp_dir.is_dir():
+            return
+        removed = 0
+        for entry in temp_dir.iterdir():
+            if entry.name.startswith("bb_") and entry.is_dir():
+                shutil.rmtree(entry, ignore_errors=True)
+                removed += 1
+            elif entry.suffix == ".gz" and entry.is_file():
+                try:
+                    entry.unlink()
+                    removed += 1
+                except OSError as exc:
+                    _log.warning("Could not remove stale temp file %s: %s", entry, exc)
+        if removed:
+            _log.info("Swept %d stale item(s) from %s", removed, temp_dir)
+    except Exception as exc:
+        _log.warning("Temp directory sweep failed: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -119,6 +206,8 @@ async def lifespan(app: FastAPI):
     # directly via `uvicorn app.main:app` instead of start.py.
     settings.validate_secrets()
     init_db()
+    _recover_interrupted_jobs()
+    _sweep_backup_temp_dir()
     _configure_timezone_on_startup()
     _sync_rclone_config_on_startup()
     _configure_syslog_on_startup()
@@ -172,8 +261,41 @@ app.include_router(settings_router.router, prefix="/api/settings", tags=["settin
 # ---- Health check (unauthenticated) --------------------------------------
 # Registered before the SPA catch-all so orchestrators/HEALTHCHECK can probe it.
 @app.get("/health", tags=["health"])
-async def health():
-    return {"status": "ok", "version": settings.APP_VERSION}
+@app.get("/api/health", tags=["health"])
+def health():
+    """Liveness/readiness probe: DB reachable and scheduler running.
+
+    A static 200 cannot distinguish a working app from one whose scheduler
+    thread has died or whose database is unreachable, so both are checked.
+    """
+    from sqlalchemy import text as _text
+
+    from app.database import SessionLocal
+
+    db_ok = False
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(_text("SELECT 1"))
+            db_ok = True
+        finally:
+            db.close()
+    except Exception:
+        db_ok = False
+
+    scheduler_ok = bool(
+        scheduler_service._scheduler and scheduler_service._scheduler.running
+    )
+    healthy = db_ok and scheduler_ok
+    return JSONResponse(
+        status_code=200 if healthy else 503,
+        content={
+            "status": "ok" if healthy else "degraded",
+            "database": "ok" if db_ok else "error",
+            "scheduler": "running" if scheduler_ok else "stopped",
+            "version": settings.APP_VERSION,
+        },
+    )
 
 
 # ---- Serve built frontend (production) -----------------------------------

@@ -357,6 +357,12 @@ def _set_sqlite_pragmas(dbapi_conn, connection_record) -> None:
         cur = dbapi_conn.cursor()
         cur.execute("PRAGMA journal_mode=WAL")
         cur.execute("PRAGMA busy_timeout=5000")
+        # Safe under WAL and markedly fewer fsyncs; the backup service commits
+        # a log line per step.
+        cur.execute("PRAGMA synchronous=NORMAL")
+        # SQLite ignores foreign key constraints unless asked, which let a
+        # deleted job orphan its backup records.
+        cur.execute("PRAGMA foreign_keys=ON")
         cur.close()
     except Exception:
         log.debug("Could not set SQLite pragmas", exc_info=True)
