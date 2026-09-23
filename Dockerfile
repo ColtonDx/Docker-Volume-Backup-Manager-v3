@@ -1,8 +1,8 @@
 # ── Stage 1: Build frontend ──────────────────────────────────────────────────
-FROM node:20-alpine AS frontend-build
+FROM node:22-alpine AS frontend-build
 WORKDIR /app
-COPY package.json bun.lockb ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY index.html vite.config.ts tsconfig*.json tailwind.config.ts postcss.config.js components.json ./
 COPY VERSION .
 COPY public/ public/

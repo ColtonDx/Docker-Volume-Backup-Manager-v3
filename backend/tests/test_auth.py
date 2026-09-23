@@ -1,4 +1,4 @@
-"""Auth tests. Require python-jose (installed from requirements)."""
+"""Auth tests. Require PyJWT (installed from requirements)."""
 
 from types import SimpleNamespace
 
@@ -56,12 +56,42 @@ def test_token_roundtrip_and_revocation():
 
 def test_token_without_version_claim_rejected():
     from app.config import settings
-    from jose import jwt
+    import jwt
 
     payload = {"sub": "admin"}  # no "tv" claim (pre-upgrade token)
     stale = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     with pytest.raises(Exception):
         get_current_user(_creds(stale))
+
+
+def test_expired_token_rejected():
+    from datetime import datetime, timedelta, timezone
+
+    import jwt
+    from app.auth import token_version_store
+    from app.config import settings
+
+    payload = {
+        "sub": "admin",
+        "tv": token_version_store.get(),
+        "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+    }
+    expired = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    with pytest.raises(Exception):
+        get_current_user(_creds(expired))
+
+
+def test_forged_tokens_rejected():
+    """Tokens signed with another key, or with no signature at all, are refused."""
+    import jwt
+    from app.auth import token_version_store
+
+    payload = {"sub": "admin", "tv": token_version_store.get()}
+    wrong_key = jwt.encode(payload, "not-the-server-secret-" * 2, algorithm="HS256")
+    unsigned = jwt.encode(payload, None, algorithm="none")
+    for token in (wrong_key, unsigned):
+        with pytest.raises(Exception):
+            get_current_user(_creds(token))
 
 
 def test_missing_credentials_rejected():

@@ -118,7 +118,7 @@ export interface BackupJob {
   schedule: Schedule | null;
   retention: RetentionPolicy | null;
   containers: string[];
-  status: "active" | "running" | "error" | "idle";
+  status: "active" | "running" | "queued" | "error" | "idle";
   last_run: string | null;
   next_run: string | null;
   created_at: string;
