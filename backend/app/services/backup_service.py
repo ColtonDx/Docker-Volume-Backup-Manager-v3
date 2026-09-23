@@ -342,20 +342,32 @@ class BackupService:
             archive_path = temp_dir / archive_name
 
             import tempfile
+            from app.services.tar_utils import append_volume
             exported_volumes: list[str] = []
             failed_volumes: list[str] = []
-            # Stage under BACKUP_TEMP_DIR, not /tmp: the uncompressed copy of
-            # every volume goes here and would otherwise fill the container's
-            # writable layer instead of the volume provisioned for it.
+            failure_reasons: list[str] = []
+            # Stage under BACKUP_TEMP_DIR, not /tmp: every volume's export goes
+            # here and would otherwise fill the container's writable layer
+            # instead of the volume provisioned for it.
             with tempfile.TemporaryDirectory(prefix="bb_", dir=str(temp_dir)) as work_dir:
+                exports: dict[str, str] = {}
                 for vol in all_volumes:
-                    exported = docker_service.export_volume(vol["name"], work_dir)
+                    try:
+                        exported = docker_service.export_volume(vol["name"], work_dir)
+                        reason = None if exported else "Docker is not available"
+                    except Exception as exc:
+                        exported, reason = None, str(exc)
                     if exported:
+                        exports[vol["name"]] = exported
                         exported_volumes.append(vol["name"])
                         logger.info("Exported volume %s to staging dir", vol["name"])
                     else:
                         failed_volumes.append(vol["name"])
-                        self._log(db, "warning", job.name, f"Could not export volume {vol['name']}")
+                        failure_reasons.append(f"{vol['name']} ({reason})")
+                        self._log(
+                            db, "warning", job.name,
+                            f"Could not export volume {vol['name']}", reason,
+                        )
 
                 if not exported_volumes:
                     raise RuntimeError(
@@ -367,10 +379,10 @@ class BackupService:
                     str(archive_path), "w:gz", compresslevel=_compress_level(db)
                 ) as tar:
                     for vol_name in exported_volumes:
-                        vol_dir = os.path.join(work_dir, vol_name)
-                        if os.path.isdir(vol_dir):
-                            tar.add(vol_dir, arcname=vol_name)
-                            logger.info("Added volume %s to archive", vol_name)
+                        append_volume(tar, exports[vol_name], vol_name)
+                        # Free the staged copy as soon as it is in the archive.
+                        os.unlink(exports[vol_name])
+                        logger.info("Added volume %s to archive", vol_name)
 
             archive_size = archive_path.stat().st_size if archive_path.exists() else 0
 
@@ -413,7 +425,7 @@ class BackupService:
             record.volumes_backed_up = json.dumps(exported_volumes)
             if failed_volumes:
                 record.error_message = (
-                    f"Volumes not backed up: {', '.join(failed_volumes)}"
+                    f"Volumes not backed up: {'; '.join(failure_reasons)}"
                 )
             db.commit()
 
@@ -424,7 +436,7 @@ class BackupService:
                     db, "warning", job.name,
                     f"Backup completed with {len(failed_volumes)} volume(s) missing",
                     f"Size: {size_str} | Duration: {dur_str} | Storage: {storage.name} | "
-                    f"Failed: {', '.join(failed_volumes)}"
+                    f"Failed: {'; '.join(failure_reasons)}"
                 )
                 notification_service.notify_event(
                     "failure", job.name,
@@ -591,19 +603,10 @@ class BackupService:
             running_ids = [c["id"] for c in containers if c["status"] == "running"]
             stopped = docker_service.stop_containers(running_ids)
 
-            # 3. Extract archive and import into volumes via helper containers
+            # 3. Split the archive per volume and import via helper containers
             import tempfile
-            from app.services.tar_utils import safe_extractall
+            from app.services.tar_utils import split_archive
             with tempfile.TemporaryDirectory(prefix="bb_restore_", dir=str(temp_dir)) as work_dir:
-                with tarfile.open(str(local_archive), "r:gz") as tar:
-                    safe_extractall(tar, work_dir)
-
-                # Each top-level dir in the archive is a volume name
-                volume_names = [
-                    d for d in os.listdir(work_dir)
-                    if os.path.isdir(os.path.join(work_dir, d))
-                ]
-
                 # Only restore volumes this record actually backed up. Without
                 # this, a crafted or corrupt archive can name any volume on the
                 # host and import_volume will wipe it.
@@ -611,25 +614,32 @@ class BackupService:
                 # no recorded volume list, so there is nothing to scope against
                 # and the archive's own directories are used as-is.
                 expected = set(json.loads(record.volumes_backed_up or "[]"))
-                if expected:
-                    unexpected = [v for v in volume_names if v not in expected]
-                    if unexpected:
-                        self._log(
-                            db, "warning", job_name,
-                            "Skipping volume(s) not listed in this backup record: "
-                            f"{', '.join(unexpected)}",
-                        )
-                    volume_names = [v for v in volume_names if v in expected]
+                # Checks the whole archive before any volume is touched.
+                split = split_archive(str(local_archive), work_dir, expected or None)
 
-                if not volume_names:
+                if split.unexpected:
+                    self._log(
+                        db, "warning", job_name,
+                        "Skipping volume(s) not listed in this backup record: "
+                        f"{', '.join(split.unexpected)}",
+                    )
+                if split.skipped:
+                    self._log(
+                        db, "warning", job_name,
+                        f"Skipped {len(split.skipped)} device node(s) or unsupported entries in the archive",
+                        ", ".join(split.skipped[:20]),
+                    )
+
+                if not split.volumes:
                     raise RuntimeError(
                         "Archive contains no volumes matching this backup record"
                     )
 
                 failed_volumes = []
-                for vol_name in volume_names:
-                    vol_dir = os.path.join(work_dir, vol_name)
-                    ok = docker_service.import_volume(vol_name, vol_dir)
+                for vol_name, vol_tar in split.volumes.items():
+                    ok = docker_service.import_volume(
+                        vol_name, vol_tar, split.roots.get(vol_name)
+                    )
                     if ok:
                         logger.info("Restored volume %s", vol_name)
                     else:

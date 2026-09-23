@@ -71,9 +71,9 @@ docker volume rm $(docker volume ls -q --filter name=dvbmtest-) 2>/dev/null
 
 | File | Checks |
 |---|---|
-| `test_backup_restore.py` | Full backup -> wipe -> restore -> byte-compare round trip for **all four backends**; upload size verification; remote deletion; multi-volume and shared-volume handling; a 32 MB streaming case |
+| `test_backup_restore.py` | Full backup -> wipe -> restore -> byte-compare round trip for **all four backends**; upload size verification; remote deletion; multi-volume and shared-volume handling; **file metadata** (absolute symlinks, ownership, setuid, hard links, FIFOs, volume root owner/mode) survives the round trip; a 32 MB streaming case |
 | `test_detection.py` | Only labelled containers are selected; custom label keys; already-stopped containers are backed up but not started; running containers are restarted; **containers are restarted when the upload fails**; clear errors for no-match and no-volumes; staging cleaned on both success and failure |
-| `test_integrity.py` | Total export failure is not recorded as success; partial failure is `warning`; truncated uploads are caught; restore ignores volumes not on the record; path traversal and symlink escapes rejected; interrupted jobs recovered at startup |
+| `test_integrity.py` | Total export failure is not recorded as success; partial failure is `warning`; truncated uploads are caught; restore ignores volumes not on the record; path traversal and writes through symlinks rejected; exporting a missing volume does not create it; export failure reasons reach the record; interrupted jobs recovered at startup |
 
 The round-trip tests destroy the source volume between backup and restore, so
 they cannot pass unless the archive genuinely contains the data.

@@ -211,6 +211,64 @@ def test_multiple_volumes_are_all_captured(env, make_storage, make_job, localfs_
     assert env.read_volume(vol_b) == {"b.txt": "bravo"}
 
 
+def _volume_metadata(env, volume: str) -> str:
+    """One line per entry: path, type, owner, mode, link target, inode group."""
+    return env.client.containers.run(
+        WORKLOAD_IMAGE,
+        command=["sh", "-c",
+                 "cd /data && find . | sort | while read p; do "
+                 "echo \"$p $(stat -c '%F %u:%g %a %h' \"$p\") $(readlink \"$p\")\"; done"],
+        volumes={volume: {"bind": "/data", "mode": "ro"}},
+        remove=True,
+    ).decode()
+
+
+def test_file_metadata_survives_roundtrip(env, make_storage, make_job, localfs_config):
+    """Symlinks, ownership, permissions, hard links and FIFOs round-trip exactly.
+
+    Mirrors a CryptPad volume mounted over the whole app directory: it holds an
+    absolute symlink, which used to make the export fail outright ("volume
+    missing"). The same extraction step also reset ownership to DVBM's own
+    user, so a restored Postgres volume came back owned by root.
+    """
+    job_name = f"metadata-{env.run_id}"
+    volume = env.create_volume("meta-vol")
+    env.client.containers.run(
+        WORKLOAD_IMAGE,
+        command=["sh", "-c",
+                 "cd /data && mkdir pg && echo rows > pg/table && "
+                 "chown -R 999:999 pg && chmod 700 pg && chmod 600 pg/table && "
+                 "echo run > tool && chmod 4755 tool && "
+                 "ln -s /cryptpad/src/tweetnacl abs-link && ln -s pg/table rel-link && "
+                 "ln pg/table hard-link && mkfifo pipe && "
+                 "chown 1000:1000 /data && chmod 750 /data"],
+        volumes={volume: {"bind": "/data", "mode": "rw"}},
+        remove=True,
+    )
+    before = _volume_metadata(env, volume)
+
+    env.create_workload(
+        "meta-app", volumes={volume: "/data"}, labels={LABEL_KEY: job_name}
+    )
+    storage = make_storage(f"meta-store-{env.run_id}", "localfs", localfs_config)
+    job = make_job(job_name, storage, LABEL_KEY, job_name)
+
+    record = run_backup(job.id)
+    assert record.status == "success", f"backup failed: {record.error_message}"
+
+    env.client.containers.run(
+        WORKLOAD_IMAGE,
+        command=["sh", "-c", "rm -rf /data/* /data/.[!.]*; chown 0:0 /data; chmod 755 /data"],
+        volumes={volume: {"bind": "/data", "mode": "rw"}},
+        remove=True,
+    )
+    assert _volume_metadata(env, volume) != before
+
+    run_restore(record.id)
+
+    assert _volume_metadata(env, volume) == before
+
+
 def test_shared_volume_is_deduplicated(env, make_storage, make_job, localfs_config):
     """Two containers sharing a volume back it up once, not twice."""
     job_name = f"shared-{env.run_id}"

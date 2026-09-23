@@ -12,9 +12,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
-import tarfile
-import tempfile
 import threading
 import time
 from typing import Any
@@ -189,7 +186,7 @@ class DockerService:
             self.client.images.pull(*self.HELPER_IMAGE.split(":"))
 
     def export_volume(self, volume_name: str, dest_dir: str) -> str | None:
-        """Export a named Docker volume's contents into *dest_dir*/<volume_name>/.
+        """Export a named Docker volume to *dest_dir*/<volume_name>.tar.
 
         Spins up a temporary ``alpine`` container that mounts the volume
         read-only and streams its contents back as a tar archive via the
@@ -197,14 +194,26 @@ class DockerService:
         itself is running inside a container (i.e. no host filesystem
         access).
 
-        Returns the path to the extracted directory, or None on failure.
+        The tar is kept as Docker produced it, never extracted, so ownership,
+        permissions, symlinks and special files survive exactly.
+
+        Returns the tar's path, or None when Docker is unavailable. Raises on
+        failure, with the reason in the exception.
         """
         if not self.client:
             return None
 
+        import docker
+
+        # Mounting a volume that does not exist silently creates an empty one,
+        # which would then be recorded as a successful backup of nothing.
+        try:
+            self.client.volumes.get(volume_name)
+        except docker.errors.NotFound:
+            raise RuntimeError(f"volume {volume_name} does not exist")
+
         container = None
-        out_path = os.path.join(dest_dir, volume_name)
-        os.makedirs(out_path, exist_ok=True)
+        out_path = os.path.join(dest_dir, f"{volume_name}.tar")
 
         try:
             self._ensure_helper_image()
@@ -216,31 +225,23 @@ class DockerService:
                 volumes={volume_name: {"bind": "/volume_data", "mode": "ro"}},
             )
 
-            # get_archive streams a tar of /volume_data/.  The paths
-            # inside the tar start with "volume_data/…".
+            # Streamed to disk: a multi-GB volume must not be held in RAM.
             bits, _stat = container.get_archive("/volume_data/.")
-            # Spool the stream to disk rather than joining it in memory: a
-            # multi-GB volume would otherwise be held in RAM twice over.
-            from app.services.tar_utils import safe_extractall
-            with tempfile.NamedTemporaryFile(
-                dir=dest_dir, prefix=".export_", suffix=".tar"
-            ) as spool:
+            with open(out_path, "wb") as fh:
                 for chunk in bits:
-                    spool.write(chunk)
-                spool.flush()
-                spool.seek(0)
-                with tarfile.open(fileobj=spool, mode="r") as tar:
-                    safe_extractall(tar, out_path)
+                    fh.write(chunk)
 
             logger.info("Exported volume %s -> %s", volume_name, out_path)
             return out_path
 
         except Exception as exc:
             logger.error("Failed to export volume %s: %s", volume_name, exc)
-            # Remove the directory created up front, otherwise a failed export
-            # is indistinguishable from a backup of a genuinely empty volume.
-            shutil.rmtree(out_path, ignore_errors=True)
-            return None
+            # A partial tar must not be mistaken for a complete export.
+            try:
+                os.unlink(out_path)
+            except FileNotFoundError:
+                pass
+            raise
         finally:
             if container:
                 try:
@@ -248,12 +249,23 @@ class DockerService:
                 except Exception:
                     pass
 
-    def import_volume(self, volume_name: str, source_dir: str) -> bool:
-        """Import contents of *source_dir* into a named Docker volume.
+    def import_volume(
+        self,
+        volume_name: str,
+        source_tar: str,
+        root: tuple[int, int, int] | None = None,
+    ) -> bool:
+        """Replace a named Docker volume's contents with *source_tar*.
+
+        *source_tar* holds the volume's contents rooted at ".", as produced by
+        tar_utils.split_archive. It must be complete before this is called: the
+        volume is cleared first, and there is no going back from that.
+        *root* is the (uid, gid, mode) to give the volume's top directory.
 
         Spins up a temporary ``alpine`` container with the volume mounted
-        read-write, clears existing data, and uploads a tar of
-        *source_dir* into it via ``put_archive``.
+        read-write, clears existing data, and uploads the tar into it via
+        ``put_archive``. The Docker daemon does the extraction, keeping the
+        ownership and permissions recorded in the tar.
         """
         if not self.client:
             return False
@@ -262,37 +274,36 @@ class DockerService:
         try:
             self._ensure_helper_image()
 
-            # Build the tar BEFORE clearing the volume. If archive creation
-            # fails we must not have destroyed the existing data already.
-            # Spooled to disk so a large volume does not sit in RAM twice.
-            with tempfile.NamedTemporaryFile(prefix=".import_", suffix=".tar") as spool:
-                with tarfile.open(fileobj=spool, mode="w") as tar:
-                    for entry in os.listdir(source_dir):
-                        full = os.path.join(source_dir, entry)
-                        tar.add(full, arcname=entry)
-                spool.flush()
-                spool.seek(0)
+            # Clear existing volume data with a disposable container
+            self.client.containers.run(
+                self.HELPER_IMAGE,
+                command=["sh", "-c", "rm -rf /volume_data/* /volume_data/.[!.]* 2>/dev/null; true"],
+                volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
+                remove=True,
+            )
 
-                # Clear existing volume data with a disposable container
+            # Create (don't start) a helper container with the volume mounted.
+            # Keeping the container in "created" state ensures the volume
+            # mount is active for put_archive (same pattern as export_volume).
+            container = self.client.containers.create(
+                self.HELPER_IMAGE,
+                command="true",
+                volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
+            )
+
+            # Upload into the volume via the helper container. Passing the
+            # file object streams it instead of copying it into memory.
+            with open(source_tar, "rb") as fh:
+                container.put_archive("/volume_data", fh)
+
+            if root is not None:
+                uid, gid, mode = (int(v) for v in root)
                 self.client.containers.run(
                     self.HELPER_IMAGE,
-                    command=["sh", "-c", "rm -rf /volume_data/* /volume_data/.[!.]* 2>/dev/null; true"],
+                    command=["sh", "-c", f"chown {uid}:{gid} /volume_data && chmod {mode:o} /volume_data"],
                     volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
                     remove=True,
                 )
-
-                # Create (don't start) a helper container with the volume mounted.
-                # Keeping the container in "created" state ensures the volume
-                # mount is active for put_archive (same pattern as export_volume).
-                container = self.client.containers.create(
-                    self.HELPER_IMAGE,
-                    command="true",
-                    volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
-                )
-
-                # Upload into the volume via the helper container. Passing the
-                # file object streams it instead of copying it into memory.
-                container.put_archive("/volume_data", spool)
 
             # Verify data was written by checking the volume
             verify = self.client.containers.run(
@@ -305,7 +316,7 @@ class DockerService:
                 logger.warning("Volume %s appears empty after import", volume_name)
                 return False
 
-            logger.info("Imported %s -> volume %s", source_dir, volume_name)
+            logger.info("Imported %s -> volume %s", source_tar, volume_name)
             return True
 
         except Exception as exc:

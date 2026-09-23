@@ -7,6 +7,7 @@ restored never reports success.
 
 from __future__ import annotations
 
+import io
 import json
 import tarfile
 from pathlib import Path
@@ -134,6 +135,8 @@ def test_failed_export_does_not_leave_an_empty_directory(
         assert vol_bad not in top_level, (
             "a volume that failed to export appears in the archive"
         )
+    # The reason must reach the user, not only the container log.
+    assert "simulated docker failure" in (record.error_message or "")
 
 
 def test_truncated_upload_is_caught_by_verification(
@@ -258,61 +261,59 @@ def test_restore_rejects_path_traversal_in_archive(
     )
 
 
-def test_extraction_helper_rejects_escaping_members(tmp_path):
-    """_extract_safely refuses members that resolve outside the destination.
+def test_restore_rejects_write_through_symlink(
+    env, make_storage, make_job, localfs_config, tmp_path
+):
+    """A member placed beneath a symlink is refused before any volume is touched.
 
-    Asserted directly rather than only through a restore, because the tarfile
-    default filter differs by Python version: 3.14 rejects these on its own,
-    while 3.12 — which the shipped image uses — does not. Testing the helper
-    keeps this meaningful on every interpreter.
+    Absolute symlinks are legitimate volume contents and are restored as-is,
+    so the danger is a later member that would be written *through* one.
     """
-    from app.services.tar_utils import safe_extractall as _extract_safely
+    job_name = f"symwrite-{env.run_id}"
+    original = {"f.txt": "untouched"}
+    vol = env.create_volume("symwrite-vol", original)
+    env.create_workload(
+        "symwrite-app", volumes={vol: "/data"}, labels={LABEL_KEY: job_name}
+    )
+    storage = make_storage(f"symw-store-{env.run_id}", "localfs", localfs_config)
+    job = make_job(job_name, storage, LABEL_KEY, job_name)
+
+    record = run_backup(job.id)
+    assert record.status == "success", record.error_message
 
     payload = tmp_path / "payload.txt"
     payload.write_text("escaped")
+    archive = Path(record.storage_path)
+    with tarfile.open(archive) as tar:
+        members = [(m, tar.extractfile(m).read() if m.isreg() else None) for m in tar]
+    with tarfile.open(archive, "w:gz") as tar:
+        for m, data in members:
+            tar.addfile(m, io.BytesIO(data) if data is not None else None)
+        link = tarfile.TarInfo(f"{vol}/escape")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "/etc"
+        tar.addfile(link)
+        tar.add(payload, arcname=f"{vol}/escape/dvbm-canary")
 
-    archive = tmp_path / "evil.tar"
-    with tarfile.open(archive, "w") as tar:
-        tar.add(payload, arcname="../escaped.txt")
-        tar.add(payload, arcname="/absolute.txt")
+    run_restore(record.id)
 
-    dest = tmp_path / "dest"
-    dest.mkdir()
-
-    with pytest.raises(Exception):
-        with tarfile.open(archive) as tar:
-            _extract_safely(tar, str(dest))
-
-    assert not (tmp_path / "escaped.txt").exists(), "member escaped the destination"
-    assert list(dest.rglob("*")) == [] or all(
-        p.is_relative_to(dest) for p in dest.rglob("*")
+    assert env.read_volume(vol) == original, (
+        "a restore of an unsafe archive modified the volume"
     )
 
 
-def test_symlink_escape_is_rejected(tmp_path):
-    """A symlink member pointing outside the destination is not recreated."""
-    from app.services.tar_utils import safe_extractall as _extract_safely
+def test_export_of_missing_volume_does_not_create_it(env):
+    """Mounting a volume that does not exist silently creates an empty one."""
+    import docker
 
-    archive = tmp_path / "symlink.tar"
-    with tarfile.open(archive, "w") as tar:
-        info = tarfile.TarInfo("escape")
-        info.type = tarfile.SYMTYPE
-        info.linkname = "/etc/passwd"
-        tar.addfile(info)
+    from app.services.docker_service import docker_service
 
-    dest = tmp_path / "dest"
-    dest.mkdir()
+    missing = env.name("never-created")
+    with pytest.raises(RuntimeError, match="does not exist"):
+        docker_service.export_volume(missing, str(env.tmp_path))
 
-    try:
-        with tarfile.open(archive) as tar:
-            _extract_safely(tar, str(dest))
-    except Exception:
-        pass
-
-    link = dest / "escape"
-    assert not link.is_symlink() or not str(link.resolve()).startswith("/etc"), (
-        "an absolute symlink escaping the destination was recreated"
-    )
+    with pytest.raises(docker.errors.NotFound):
+        env.client.volumes.get(missing)
 
 
 def test_interrupted_job_is_recovered_on_startup(
