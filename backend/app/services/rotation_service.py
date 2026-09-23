@@ -49,8 +49,10 @@ class RotationService:
 
                 cutoff = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
 
-                # Always keep at least min_backups
-                to_keep = max(policy.min_backups, 0)
+                # Never delete the last remaining backup, whatever the policy
+                # says: min_backups=0 would otherwise wipe a job's entire
+                # history the first time every record aged out.
+                to_keep = max(policy.min_backups or 0, 1)
                 kept = 0
                 deleted_age = 0
                 deleted_count = 0
@@ -80,6 +82,9 @@ class RotationService:
                         except Exception as exc:
                             logger.warning("Failed to delete remote file %s: %s", rec.storage_path, exc)
                             storage_errors += 1
+                            # Keep the DB row: dropping it here would orphan the
+                            # remote file with nothing left pointing at it.
+                            continue
 
                     db.delete(rec)
                     if reason == "age":
@@ -97,7 +102,10 @@ class RotationService:
                         reasons.append(f"{deleted_count} over limit (max {policy.max_backups})")
                     details = "; ".join(reasons)
                     if storage_errors:
-                        details += f"; {storage_errors} storage delete(s) failed"
+                        details += (
+                            f"; {storage_errors} storage delete(s) failed — "
+                            "records kept for retry"
+                        )
                     db.add(LogEntry(
                         level="info",
                         job_name=job.name,

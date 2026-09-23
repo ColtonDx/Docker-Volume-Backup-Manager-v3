@@ -187,32 +187,61 @@ export default function BackupJobs() {
   });
 
   // Bulk action handlers
+  //
+  // Promise.allSettled rather than Promise.all: with all(), the first rejection
+  // aborted the whole handler, so the cache was never invalidated, the dialog
+  // stayed open and the selection went stale even though some operations had
+  // already succeeded on the server.
+  const runBulk = async (
+    ids: number[],
+    action: (id: number) => Promise<unknown>,
+    verb: string,
+    onDone?: () => void,
+  ) => {
+    const results = await Promise.allSettled(ids.map((id) => action(id)));
+    const failed = results.flatMap((r, i) =>
+      r.status === "rejected" ? [{ id: ids[i], reason: r.reason }] : []
+    );
+    const succeeded = results.length - failed.length;
+
+    if (failed.length === 0) {
+      toast.success(`${verb} ${succeeded} job(s)`);
+    } else {
+      const names = failed
+        .map(({ id }) => jobs.find((j) => j.id === id)?.name ?? `#${id}`)
+        .join(", ");
+      const detail =
+        failed[0].reason instanceof Error ? failed[0].reason.message : String(failed[0].reason);
+      if (succeeded === 0) {
+        toast.error(`Failed to ${verb.toLowerCase()} all ${failed.length} job(s): ${detail}`);
+      } else {
+        toast.warning(
+          `${verb} ${succeeded} job(s); ${failed.length} failed (${names}): ${detail}`
+        );
+      }
+    }
+
+    // Always refresh and reset, whatever the outcome — the server state has
+    // changed for any request that did succeed.
+    invalidate();
+    clearSelection();
+    onDone?.();
+  };
+
   const handleBulkRun = () => {
-    const ids = Array.from(selectedIds);
-    Promise.all(ids.map((id) => runJob(id)))
-      .then(() => { toast.success(`Triggered ${ids.length} job(s)`); invalidate(); clearSelection(); })
-      .catch((err: Error) => toast.error(err.message));
+    void runBulk(Array.from(selectedIds), runJob, "Triggered");
   };
 
   const handleBulkEnable = () => {
-    const ids = Array.from(selectedIds);
-    Promise.all(ids.map((id) => resumeJob(id)))
-      .then(() => { toast.success(`Enabled ${ids.length} job(s)`); invalidate(); clearSelection(); })
-      .catch((err: Error) => toast.error(err.message));
+    void runBulk(Array.from(selectedIds), resumeJob, "Enabled");
   };
 
   const handleBulkDisable = () => {
-    const ids = Array.from(selectedIds);
-    Promise.all(ids.map((id) => pauseJob(id)))
-      .then(() => { toast.success(`Disabled ${ids.length} job(s)`); invalidate(); clearSelection(); })
-      .catch((err: Error) => toast.error(err.message));
+    void runBulk(Array.from(selectedIds), pauseJob, "Disabled");
   };
 
   const handleBulkDelete = () => {
-    const ids = Array.from(selectedIds);
-    Promise.all(ids.map((id) => deleteJob(id)))
-      .then(() => { toast.success(`Deleted ${ids.length} job(s)`); invalidate(); clearSelection(); setBulkDeleteOpen(false); })
-      .catch((err: Error) => toast.error(err.message));
+    void runBulk(Array.from(selectedIds), deleteJob, "Deleted", () => setBulkDeleteOpen(false));
   };
 
   const openBulkEdit = () => {
@@ -244,10 +273,12 @@ export default function BackupJobs() {
       setBulkEditOpen(false);
       return;
     }
-    const ids = Array.from(selectedIds);
-    Promise.all(ids.map((id) => updateJob(id, patch)))
-      .then(() => { toast.success(`Updated ${ids.length} job(s)`); invalidate(); clearSelection(); setBulkEditOpen(false); })
-      .catch((err: Error) => toast.error(err.message));
+    void runBulk(
+      Array.from(selectedIds),
+      (id) => updateJob(id, patch),
+      "Updated",
+      () => setBulkEditOpen(false),
+    );
   };
 
   // Single-job form helpers

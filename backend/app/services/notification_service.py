@@ -9,6 +9,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import os
 import smtplib
 import socket
 from datetime import datetime, timezone
@@ -23,10 +24,22 @@ logger = logging.getLogger(__name__)
 # Addresses refused as notification targets: IPv4/IPv6 link-local, which
 # includes cloud instance metadata (169.254.169.254). Private LAN ranges are
 # intentionally allowed — self-hosted webhooks commonly point at the LAN.
+# Link-local and cloud metadata are always blocked. Private, loopback and
+# reserved ranges are blocked too unless the operator opts in: the app sits on
+# the Docker host's network, so a webhook pointed at 127.0.0.1 or 192.168.x.x
+# reaches internal services, and the synchronous "test channel" endpoint makes
+# that a usable probe. Self-hosted Gotify/ntfy on a LAN is the legitimate case
+# for ALLOW_PRIVATE_NOTIFICATION_URLS=true.
 _BLOCKED_NETWORKS = (
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("fe80::/10"),
 )
+
+# Private/LAN destinations are permitted by default: this is a homelab tool and
+# a self-hosted Gotify/ntfy on 192.168.x.x is the common case. Set
+# BLOCK_PRIVATE_NOTIFICATION_URLS=true to refuse them, which is worth doing if
+# the app is reachable by anyone you would not trust to probe your network.
+_BLOCK_PRIVATE = os.getenv("BLOCK_PRIVATE_NOTIFICATION_URLS", "false").lower() == "true"
 
 
 def _validate_outbound_url(url: str) -> None:
@@ -54,6 +67,16 @@ def _validate_outbound_url(url: str) -> None:
             continue
         if any(ip in net for net in _BLOCKED_NETWORKS):
             raise ValueError(f"Blocked destination address {ip} (link-local/metadata)")
+        # Loopback is always refused: it can only mean the app's own container,
+        # which is never a legitimate notification target and makes the
+        # "test channel" endpoint a probe of services bound inside it.
+        if ip.is_loopback or ip.is_unspecified:
+            raise ValueError(f"Blocked destination address {ip} (loopback)")
+        if _BLOCK_PRIVATE and (ip.is_private or ip.is_reserved or ip.is_multicast):
+            raise ValueError(
+                f"Refusing to send to private address {ip} for host '{host}' "
+                "(BLOCK_PRIVATE_NOTIFICATION_URLS is set)."
+            )
 
 
 class NotificationService:

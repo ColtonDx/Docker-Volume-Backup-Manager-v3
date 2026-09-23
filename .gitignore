@@ -38,3 +38,6 @@ Review.md
 *.njsproj
 *.sln
 *.sw?
+
+# Local compose environment (per-machine DOCKER_GID, dev credentials)
+.env

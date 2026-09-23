@@ -23,6 +23,8 @@ A self-hosted web app for backing up Docker container volumes. It stops the targ
   - [Syslog forwarding](#syslog-forwarding)
 - [API reference](#api-reference)
 - [Data persistence](#data-persistence)
+- [Building from source](#building-from-source)
+- [Tests](#tests)
 - [TLS / HTTPS](#tls--https)
 - [Database encryption](#database-encryption)
 
@@ -652,6 +654,62 @@ If the database opens with neither the new nor the legacy scheme, the app stops 
 
 ---
 
+## Building from source
+
+Cloning this repository and running:
+
+```bash
+docker compose up --build
+```
+
+builds the image from the working tree rather than pulling the published one,
+because the repo includes a `docker-compose.override.yml` that Compose merges
+automatically. Anyone testing a branch is therefore running their own code.
+Release users are unaffected — the compose snippet in the
+[Quick start](#quick-start) has no override file beside it.
+
+To use the published image from a checkout, bypass the override explicitly:
+
+```bash
+docker compose -f docker-compose.yml up
+```
+
+Optionally pin dev credentials in a gitignored `.env` so
+`docker compose down -v` does not log you out:
+
+```bash
+echo "JWT_SECRET=$(openssl rand -base64 32)" > .env
+echo "APP_PASSWORD=pick-something" >> .env
+```
+
+Generate your own value and never carry it into a real deployment — anyone
+holding the signing key can mint an admin session without the password.
+
+---
+
+## Tests
+
+```bash
+cd backend
+pip install -r requirements.txt -r requirements-dev.txt
+
+pytest tests/unit          # fast, no Docker required
+pytest tests/integration   # real containers and storage backends
+pytest tests               # everything
+```
+
+The integration suite creates disposable containers and volumes, starts a MinIO
+server and an SFTP server, and runs a full backup → wipe → restore cycle against
+each of the four storage backends, comparing the restored volume against the
+original byte for byte. It also covers container discovery, restart behaviour on
+failure, and the data-integrity rules.
+
+Everything it creates is namespaced `dvbmtest-*` and removed afterwards,
+including on failure. Tests needing Docker skip automatically when the daemon is
+unreachable. See `backend/tests/README.md` for the coverage table.
+
+---
+
 ## Security
 
 ### Docker socket access
@@ -696,7 +754,23 @@ Keep the app on a trusted network and behind authentication regardless.
 - **Set a strong `APP_PASSWORD`** — leaving it unset or at a known default logs
   a loud warning; the UI is otherwise unprotected.
 - Notification/webhook targets are restricted from reaching cloud metadata /
-  link-local addresses; private LAN targets remain allowed.
+  link-local addresses; private LAN targets remain allowed, since a self-hosted
+  Gotify or ntfy on the LAN is the common case. Loopback is always refused (it
+  could only mean the app's own container). Set
+  `BLOCK_PRIVATE_NOTIFICATION_URLS=true` to refuse private ranges as well.
+- **SFTP host keys are verified.** The key seen on the first connection to a
+  server is recorded in `known_hosts` in the data directory and required to
+  match thereafter, or pin one explicitly with the storage's
+  `host_key_fingerprint` field. Existing backups are unaffected: the first
+  connection records the key and proceeds. A backup fails on a host key
+  mismatch only if the key later changes — either interception, or a
+  legitimately rebuilt server, in which case remove that line from
+  `<data volume>/known_hosts`.
+- **Local filesystem storage paths are confined** to `/local-backups` and
+  `/backups`, so a storage backend cannot be pointed at `/etc`.
+- **rclone extra flags are allowlisted** to transfer-tuning options
+  (`--transfers`, `--bwlimit`, `--checkers`, …). Flags that redirect where
+  rclone reads or writes, such as `--config` and `--log-file`, are rejected.
 
 ---
 

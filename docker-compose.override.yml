@@ -1,0 +1,55 @@
+# Development override — build from source instead of pulling the published image.
+#
+# Docker Compose reads docker-compose.yml and docker-compose.override.yml
+# together by default, so on a checkout of this repository:
+#
+#     docker compose up --build
+#
+# builds the image from this working tree. Everything else (ports, volumes,
+# environment, healthcheck) comes from docker-compose.yml, so there is only one
+# place to change those.
+#
+# This file is committed deliberately: anyone testing a branch should be running
+# their own code, not last release's image. Release tarballs and the compose
+# snippet in the README do not include it, so end users still get the published
+# image.
+#
+# To ignore this file and use the published image from a checkout:
+#
+#     docker compose -f docker-compose.yml up
+#
+services:
+  docker-volume-backup-manager:
+    build:
+      context: .
+    # Distinguish locally built images from the published ones in `docker images`.
+    image: docker-volume-backup-manager-v3:local
+    environment:
+      # ── Dev convenience: stable credentials across `docker compose down -v` ──
+      #
+      # Both read from .env, which is gitignored, so nothing secret is committed.
+      # The app refuses to start without a JWT_SECRET, so generate one before
+      # the first run:
+      #
+      #     {
+      #       echo "JWT_SECRET=$(openssl rand -base64 32)"
+      #       echo "APP_PASSWORD=pick-something"
+      #     } > .env
+      #
+      # Pinning JWT_SECRET also keeps you logged in across
+      # `docker compose down -v`, which would otherwise wipe the data volume.
+      #
+      # A value committed here would be public in git and would sign valid
+      # admin tokens for every checkout of this repo — the exact vulnerability
+      # the startup check exists to prevent. Generate your own, and never carry
+      # a dev value into a real deployment.
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env — see the comment above}
+      - APP_PASSWORD=${APP_PASSWORD:-changeme}
+
+    # A source build is for development, so surface application logs rather
+    # than the default json-file driver's silent accumulation.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

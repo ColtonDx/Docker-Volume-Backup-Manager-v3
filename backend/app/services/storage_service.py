@@ -7,8 +7,10 @@ storage targets: local filesystem, S3, FTP/SFTP, and rclone remotes.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -43,8 +45,24 @@ class StorageService:
     # ------------------------------------------------------------------
 
     def delete_remote(self, backend_type: str, config: dict[str, Any], remote_path: str) -> bool:
+        """Delete a remote object. Raises on failure so callers can react."""
         handler = self._get_handler(backend_type)
         return handler["delete"](config, remote_path)
+
+    # ------------------------------------------------------------------
+    # Remote size (upload verification)
+    # ------------------------------------------------------------------
+
+    def remote_size(self, backend_type: str, config: dict[str, Any], remote_path: str) -> int | None:
+        """Return the size in bytes of a remote object, or None if unknown."""
+        handler = self._get_handler(backend_type)
+        if "size" not in handler:
+            return None
+        try:
+            return handler["size"](config, remote_path)
+        except Exception as exc:
+            logger.warning("Could not stat remote object %s: %s", remote_path, exc)
+            return None
 
     # ------------------------------------------------------------------
     # Test connection
@@ -99,18 +117,85 @@ class StorageService:
             endpoint_url=config.get("endpoint_url") or None,
         )
 
+    # Host keys accepted on first use are recorded here so later connections
+    # are pinned to the same server.
+    KNOWN_HOSTS_PATH = "known_hosts"
+
+    @staticmethod
+    def _known_hosts_file() -> Path:
+        from app.config import settings
+
+        settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        return settings.DATA_DIR / StorageService.KNOWN_HOSTS_PATH
+
+    @staticmethod
+    def _verify_host_key(transport, host: str, port: int, expected_fingerprint: str = "") -> None:
+        """Verify the server's host key against a pin or the known_hosts file.
+
+        Raw paramiko Transport does no host key checking at all, which lets any
+        machine on the path impersonate the backup server and collect the
+        password plus every archive.
+        """
+        import base64
+        import hashlib
+
+        key = transport.get_remote_server_key()
+        fingerprint = "SHA256:" + base64.b64encode(
+            hashlib.sha256(key.asbytes()).digest()
+        ).decode().rstrip("=")
+
+        if expected_fingerprint:
+            if fingerprint != expected_fingerprint.strip():
+                raise RuntimeError(
+                    f"SFTP host key mismatch for {host}:{port} — expected "
+                    f"{expected_fingerprint.strip()}, got {fingerprint}"
+                )
+            return
+
+        # Trust-on-first-use: remember the key and require it to match later.
+        entry_host = f"[{host}]:{port}" if port != 22 else host
+        store = StorageService._known_hosts_file()
+        known: dict[str, str] = {}
+        if store.is_file():
+            for line in store.read_text().splitlines():
+                parts = line.split(None, 1)
+                if len(parts) == 2:
+                    known[parts[0]] = parts[1].strip()
+
+        seen = known.get(entry_host)
+        if seen is None:
+            with store.open("a") as fh:
+                fh.write(f"{entry_host} {fingerprint}\n")
+            logger.warning("Pinned new SFTP host key for %s: %s", entry_host, fingerprint)
+        elif seen != fingerprint:
+            raise RuntimeError(
+                f"SFTP host key for {entry_host} changed (was {seen}, now {fingerprint}). "
+                "If this is expected, remove the entry from the known_hosts file in DATA_DIR."
+            )
+
     @staticmethod
     @contextlib.contextmanager
     def _sftp_connect(config: dict):
         """Context manager that yields a connected paramiko SFTPClient."""
         import paramiko
-        transport = paramiko.Transport((config["host"], config.get("port", 22)))
-        transport.connect(username=config.get("username", ""), password=config.get("password", ""))
-        sftp = paramiko.SFTPClient.from_transport(transport)
+        host = config["host"]
+        port = int(config.get("port", 22))
+        transport = paramiko.Transport((host, port))
         try:
-            yield sftp
+            transport.start_client(timeout=30)
+            StorageService._verify_host_key(
+                transport, host, port, config.get("host_key_fingerprint", "")
+            )
+            transport.auth_password(
+                username=config.get("username", ""),
+                password=config.get("password", ""),
+            )
+            sftp = paramiko.SFTPClient.from_transport(transport)
+            try:
+                yield sftp
+            finally:
+                sftp.close()
         finally:
-            sftp.close()
             transport.close()
 
     @staticmethod
@@ -136,9 +221,30 @@ class StorageService:
     # Local FS
     # ==================================================================
 
+    # Local filesystem backends are confined to these roots so an operator
+    # cannot point one at /etc.
+    LOCALFS_ROOTS = ("/local-backups", "/backups")
+
+    @staticmethod
+    def _localfs_resolve(path: str) -> str:
+        """Resolve *path* and verify it sits under an allowed root."""
+        resolved = os.path.realpath(path)
+        for root in StorageService.LOCALFS_ROOTS:
+            root_real = os.path.realpath(root)
+            if resolved == root_real or resolved.startswith(root_real + os.sep):
+                return resolved
+        raise ValueError(
+            f"Local path '{path}' is outside the allowed roots "
+            f"({', '.join(StorageService.LOCALFS_ROOTS)})"
+        )
+
+    @staticmethod
+    def _localfs_size(config: dict, remote_path: str) -> int:
+        return os.path.getsize(StorageService._localfs_resolve(remote_path))
+
     @staticmethod
     def _localfs_upload(config: dict, local_path: str, remote_name: str) -> str:
-        dest_dir = config.get("path", "/local-backups")
+        dest_dir = StorageService._localfs_resolve(config.get("path", "/local-backups"))
         os.makedirs(dest_dir, exist_ok=True)
         dest = os.path.join(dest_dir, remote_name)
         # Avoid error when source and destination resolve to the same file
@@ -158,11 +264,11 @@ class StorageService:
 
     @staticmethod
     def _localfs_delete(config: dict, remote_path: str) -> bool:
-        try:
-            os.remove(remote_path)
-            return True
-        except OSError:
-            return False
+        # Raises on failure: silently returning False caused retention to drop
+        # the DB row while leaving the file on disk forever.
+        os.remove(StorageService._localfs_resolve(remote_path))
+        return True
+
 
     @staticmethod
     def _localfs_test(config: dict) -> tuple[bool, str]:
@@ -222,14 +328,21 @@ class StorageService:
 
     @staticmethod
     def _s3_delete(config: dict, remote_path: str) -> bool:
-        try:
-            client = StorageService._s3_client(config)
-            bucket = config["bucket"]
-            key = remote_path.replace(f"s3://{bucket}/", "")
-            client.delete_object(Bucket=bucket, Key=key)
-            return True
-        except Exception:
-            return False
+        # Raises on failure so retention keeps the DB row and can retry,
+        # rather than orphaning the object in the bucket.
+        client = StorageService._s3_client(config)
+        bucket = config["bucket"]
+        key = remote_path.replace(f"s3://{bucket}/", "")
+        client.delete_object(Bucket=bucket, Key=key)
+        return True
+
+    @staticmethod
+    def _s3_size(config: dict, remote_path: str) -> int:
+        client = StorageService._s3_client(config)
+        bucket = config["bucket"]
+        key = remote_path.replace(f"s3://{bucket}/", "")
+        return int(client.head_object(Bucket=bucket, Key=key)["ContentLength"])
+
 
     @staticmethod
     def _s3_test(config: dict) -> tuple[bool, str]:
@@ -309,17 +422,27 @@ class StorageService:
 
     @staticmethod
     def _ftp_delete(config: dict, remote_path: str) -> bool:
-        try:
-            use_sftp = config.get("use_sftp", False)
-            if use_sftp:
-                with StorageService._sftp_connect(config) as sftp:
-                    sftp.remove(remote_path)
-            else:
-                with StorageService._ftp_connect(config) as ftp:
-                    ftp.delete(remote_path)
-            return True
-        except Exception:
-            return False
+        # Raises on failure — see _s3_delete.
+        use_sftp = config.get("use_sftp", False)
+        if use_sftp:
+            with StorageService._sftp_connect(config) as sftp:
+                sftp.remove(remote_path)
+        else:
+            with StorageService._ftp_connect(config) as ftp:
+                ftp.delete(remote_path)
+        return True
+
+    @staticmethod
+    def _ftp_size(config: dict, remote_path: str) -> int:
+        if config.get("use_sftp", False):
+            with StorageService._sftp_connect(config) as sftp:
+                return int(sftp.stat(remote_path).st_size)
+        with StorageService._ftp_connect(config) as ftp:
+            size = ftp.size(remote_path)
+            if size is None:
+                raise RuntimeError("FTP server did not report a size")
+            return int(size)
+
 
     @staticmethod
     def _ftp_test(config: dict) -> tuple[bool, str]:
@@ -383,17 +506,24 @@ class StorageService:
     # Rclone
     # ==================================================================
 
-    # Flags an operator may not supply via a storage's extra-flags field. The
-    # config path is controlled by the app; allowing an override would point
-    # rclone at an arbitrary remote definition.
-    _BLOCKED_RCLONE_FLAG_PREFIXES = ("--config",)
+    # The extra-flags field is free text in the UI and goes straight into
+    # rclone's argv. An allowlist is used rather than a denylist: blocking only
+    # --config still permits --log-file (writes attacker-controlled content to
+    # any path the process can reach) and --dump, among others.
+    _ALLOWED_RCLONE_FLAG = re.compile(
+        r"^--(transfers|checkers|bwlimit|retries|low-level-retries|timeout|"
+        r"contimeout|multi-thread-streams|multi-thread-cutoff|s3-chunk-size|"
+        r"drive-chunk-size|buffer-size|tpslimit|order-by|fast-list|"
+        r"ignore-checksum|no-check-certificate|size-only|checksum|update)"
+        r"(=[A-Za-z0-9._:+-]+)?$"
+    )
 
     @staticmethod
     def _rclone_extra_flags(config: dict) -> list[str]:
         """Parse the storage's extra rclone flags safely.
 
-        Uses shlex so quoted arguments are handled correctly, and rejects flags
-        that would override the app-managed --config path.
+        Uses shlex so quoted arguments are handled correctly, then validates
+        each token against an allowlist of transfer-tuning flags.
         """
         import shlex
 
@@ -404,10 +534,22 @@ class StorageService:
             tokens = shlex.split(raw)
         except ValueError as exc:
             raise ValueError(f"Invalid rclone flags: {exc}")
+        # Values may be attached (--bwlimit=1M) or separate (--bwlimit 1M), so
+        # a bare token following an allowed flag is treated as its value.
+        expect_value = False
         for tok in tokens:
-            low = tok.lower()
-            if any(low == p or low.startswith(p + "=") for p in StorageService._BLOCKED_RCLONE_FLAG_PREFIXES):
-                raise ValueError(f"Disallowed rclone flag: {tok}")
+            if expect_value and not tok.startswith("-"):
+                expect_value = False
+                continue
+            match = StorageService._ALLOWED_RCLONE_FLAG.match(tok)
+            if not match:
+                raise ValueError(
+                    f"rclone flag '{tok}' is not permitted. Allowed flags are "
+                    "limited to transfer tuning options such as --transfers=4 "
+                    "or --bwlimit=10M."
+                )
+            # No "=value" attached, so the next token may be this flag's value.
+            expect_value = "=" not in tok
         return tokens
 
     @staticmethod
@@ -443,12 +585,26 @@ class StorageService:
     def _rclone_delete(config: dict, remote_path: str) -> bool:
         from app.config import settings
 
-        try:
-            cmd = [settings.RCLONE_BINARY, "deletefile", remote_path, "--config", settings.RCLONE_CONFIG]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            return result.returncode == 0
-        except Exception:
-            return False
+        # Raises on failure — see _s3_delete.
+        cmd = [settings.RCLONE_BINARY, "deletefile", remote_path, "--config", settings.RCLONE_CONFIG]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            raise RuntimeError(f"rclone delete failed: {result.stderr.strip()}")
+        return True
+
+    @staticmethod
+    def _rclone_size(config: dict, remote_path: str) -> int:
+        from app.config import settings
+
+        cmd = [settings.RCLONE_BINARY, "lsjson", remote_path, "--config", settings.RCLONE_CONFIG]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            raise RuntimeError(f"rclone lsjson failed: {result.stderr.strip()}")
+        entries = json.loads(result.stdout or "[]")
+        if not entries:
+            raise RuntimeError(f"rclone reported no object at {remote_path}")
+        return int(entries[0]["Size"])
+
 
     @staticmethod
     def _rclone_test(config: dict) -> tuple[bool, str]:
@@ -508,6 +664,7 @@ _HANDLERS: dict[str, dict] = {
         "upload": StorageService._localfs_upload,
         "download": StorageService._localfs_download,
         "delete": StorageService._localfs_delete,
+        "size": StorageService._localfs_size,
         "test": StorageService._localfs_test,
         "list": StorageService._localfs_list,
     },
@@ -515,6 +672,7 @@ _HANDLERS: dict[str, dict] = {
         "upload": StorageService._s3_upload,
         "download": StorageService._s3_download,
         "delete": StorageService._s3_delete,
+        "size": StorageService._s3_size,
         "test": StorageService._s3_test,
         "list": StorageService._s3_list,
     },
@@ -522,6 +680,7 @@ _HANDLERS: dict[str, dict] = {
         "upload": StorageService._ftp_upload,
         "download": StorageService._ftp_download,
         "delete": StorageService._ftp_delete,
+        "size": StorageService._ftp_size,
         "test": StorageService._ftp_test,
         "list": StorageService._ftp_list,
     },
@@ -529,6 +688,7 @@ _HANDLERS: dict[str, dict] = {
         "upload": StorageService._rclone_upload,
         "download": StorageService._rclone_download,
         "delete": StorageService._rclone_delete,
+        "size": StorageService._rclone_size,
         "test": StorageService._rclone_test,
         "list": StorageService._rclone_list,
     },

@@ -10,10 +10,10 @@ Communicates with the Docker daemon via the Docker SDK to:
 
 from __future__ import annotations
 
-import io
 import logging
 import os
-import tarfile
+import threading
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -22,8 +22,15 @@ logger = logging.getLogger(__name__)
 class DockerService:
     """Wrapper around the Docker SDK client."""
 
+    # Short TTL cache for the container listing. GET /api/jobs calls this on
+    # every request and several pages poll that endpoint, so without a cache
+    # each poll is a full list-with-attrs against the daemon.
+    _LIST_CACHE_TTL = 3.0
+
     def __init__(self) -> None:
         self._client = None
+        self._list_cache: tuple[float, list[dict[str, Any]]] | None = None
+        self._list_lock = threading.Lock()
 
     @property
     def client(self):
@@ -40,15 +47,32 @@ class DockerService:
     # ------------------------------------------------------------------
 
     def list_containers(self, all: bool = True) -> list[dict[str, Any]]:
-        """Return simplified container info dicts."""
+        """Return simplified container info dicts (cached for _LIST_CACHE_TTL)."""
         if not self.client:
             return []
+
+        if all:
+            with self._list_lock:
+                cached = self._list_cache
+                if cached and (time.monotonic() - cached[0]) < self._LIST_CACHE_TTL:
+                    return cached[1]
+
         try:
             containers = self.client.containers.list(all=all)
-            return [self._container_to_dict(c) for c in containers]
+            result = [self._container_to_dict(c) for c in containers]
         except Exception as exc:
             logger.error("Failed to list containers: %s", exc)
             return []
+
+        if all:
+            with self._list_lock:
+                self._list_cache = (time.monotonic(), result)
+        return result
+
+    def invalidate_container_cache(self) -> None:
+        """Drop the cached listing after an operation that changes container state."""
+        with self._list_lock:
+            self._list_cache = None
 
     def find_containers_by_label(self, label_key: str, label_value: str) -> list[dict[str, Any]]:
         """Find containers with a specific label key=value."""
@@ -65,8 +89,14 @@ class DockerService:
             return []
 
     def stop_containers(self, container_ids: list[str], timeout: int = 30) -> list[str]:
-        """Stop containers by ID. Returns list of successfully stopped IDs."""
-        stopped = []
+        """Stop containers by ID. Returns list of successfully stopped IDs.
+
+        Raises RuntimeError if any container could not be stopped: backing up a
+        volume while its container is still writing to it produces an archive
+        that typically restores as a corrupt database.
+        """
+        stopped: list[str] = []
+        failed: list[str] = []
         if not self.client:
             return stopped
         for cid in container_ids:
@@ -78,6 +108,17 @@ class DockerService:
                     logger.info("Stopped container %s", cid)
             except Exception as exc:
                 logger.error("Failed to stop container %s: %s", cid, exc)
+                failed.append(cid)
+        self.invalidate_container_cache()
+        if failed:
+            # Restart whatever we already stopped so we do not leave the user's
+            # containers down after aborting.
+            if stopped:
+                self.start_containers(stopped)
+            raise RuntimeError(
+                f"Could not stop container(s): {', '.join(failed)}. "
+                "Aborting to avoid taking a backup of live, in-use volumes."
+            )
         return stopped
 
     def start_containers(self, container_ids: list[str]) -> list[str]:
@@ -94,6 +135,7 @@ class DockerService:
                     logger.info("Started container %s", cid)
             except Exception as exc:
                 logger.error("Failed to start container %s: %s", cid, exc)
+        self.invalidate_container_cache()
         return started
 
     def get_container_volumes(self, container_id: str) -> list[dict[str, str]]:
@@ -144,7 +186,7 @@ class DockerService:
             self.client.images.pull(*self.HELPER_IMAGE.split(":"))
 
     def export_volume(self, volume_name: str, dest_dir: str) -> str | None:
-        """Export a named Docker volume's contents into *dest_dir*/<volume_name>/.
+        """Export a named Docker volume to *dest_dir*/<volume_name>.tar.
 
         Spins up a temporary ``alpine`` container that mounts the volume
         read-only and streams its contents back as a tar archive via the
@@ -152,14 +194,26 @@ class DockerService:
         itself is running inside a container (i.e. no host filesystem
         access).
 
-        Returns the path to the extracted directory, or None on failure.
+        The tar is kept as Docker produced it, never extracted, so ownership,
+        permissions, symlinks and special files survive exactly.
+
+        Returns the tar's path, or None when Docker is unavailable. Raises on
+        failure, with the reason in the exception.
         """
         if not self.client:
             return None
 
+        import docker
+
+        # Mounting a volume that does not exist silently creates an empty one,
+        # which would then be recorded as a successful backup of nothing.
+        try:
+            self.client.volumes.get(volume_name)
+        except docker.errors.NotFound:
+            raise RuntimeError(f"volume {volume_name} does not exist")
+
         container = None
-        out_path = os.path.join(dest_dir, volume_name)
-        os.makedirs(out_path, exist_ok=True)
+        out_path = os.path.join(dest_dir, f"{volume_name}.tar")
 
         try:
             self._ensure_helper_image()
@@ -171,21 +225,23 @@ class DockerService:
                 volumes={volume_name: {"bind": "/volume_data", "mode": "ro"}},
             )
 
-            # get_archive streams a tar of /volume_data/.  The paths
-            # inside the tar start with "volume_data/…".
+            # Streamed to disk: a multi-GB volume must not be held in RAM.
             bits, _stat = container.get_archive("/volume_data/.")
-            raw = b"".join(bits)
-
-            from app.services.tar_utils import safe_extractall
-            with tarfile.open(fileobj=io.BytesIO(raw), mode="r") as tar:
-                safe_extractall(tar, out_path)
+            with open(out_path, "wb") as fh:
+                for chunk in bits:
+                    fh.write(chunk)
 
             logger.info("Exported volume %s -> %s", volume_name, out_path)
             return out_path
 
         except Exception as exc:
             logger.error("Failed to export volume %s: %s", volume_name, exc)
-            return None
+            # A partial tar must not be mistaken for a complete export.
+            try:
+                os.unlink(out_path)
+            except FileNotFoundError:
+                pass
+            raise
         finally:
             if container:
                 try:
@@ -193,12 +249,23 @@ class DockerService:
                 except Exception:
                     pass
 
-    def import_volume(self, volume_name: str, source_dir: str) -> bool:
-        """Import contents of *source_dir* into a named Docker volume.
+    def import_volume(
+        self,
+        volume_name: str,
+        source_tar: str,
+        root: tuple[int, int, int] | None = None,
+    ) -> bool:
+        """Replace a named Docker volume's contents with *source_tar*.
+
+        *source_tar* holds the volume's contents rooted at ".", as produced by
+        tar_utils.split_archive. It must be complete before this is called: the
+        volume is cleared first, and there is no going back from that.
+        *root* is the (uid, gid, mode) to give the volume's top directory.
 
         Spins up a temporary ``alpine`` container with the volume mounted
-        read-write, clears existing data, and uploads a tar of
-        *source_dir* into it via ``put_archive``.
+        read-write, clears existing data, and uploads the tar into it via
+        ``put_archive``. The Docker daemon does the extraction, keeping the
+        ownership and permissions recorded in the tar.
         """
         if not self.client:
             return False
@@ -224,16 +291,19 @@ class DockerService:
                 volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
             )
 
-            # Build a tar of the source directory contents
-            buf = io.BytesIO()
-            with tarfile.open(fileobj=buf, mode="w") as tar:
-                for entry in os.listdir(source_dir):
-                    full = os.path.join(source_dir, entry)
-                    tar.add(full, arcname=entry)
-            buf.seek(0)
+            # Upload into the volume via the helper container. Passing the
+            # file object streams it instead of copying it into memory.
+            with open(source_tar, "rb") as fh:
+                container.put_archive("/volume_data", fh)
 
-            # Upload into the volume via the helper container
-            container.put_archive("/volume_data", buf.getvalue())
+            if root is not None:
+                uid, gid, mode = (int(v) for v in root)
+                self.client.containers.run(
+                    self.HELPER_IMAGE,
+                    command=["sh", "-c", f"chown {uid}:{gid} /volume_data && chmod {mode:o} /volume_data"],
+                    volumes={volume_name: {"bind": "/volume_data", "mode": "rw"}},
+                    remove=True,
+                )
 
             # Verify data was written by checking the volume
             verify = self.client.containers.run(
@@ -246,7 +316,7 @@ class DockerService:
                 logger.warning("Volume %s appears empty after import", volume_name)
                 return False
 
-            logger.info("Imported %s -> volume %s", source_dir, volume_name)
+            logger.info("Imported %s -> volume %s", source_tar, volume_name)
             return True
 
         except Exception as exc:
