@@ -49,11 +49,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       # Report lint results without failing the build on pre-existing issues.
       # Flip to a blocking step once the existing lint debt is cleared.

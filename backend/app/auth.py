@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+import jwt
 
 from app.config import settings
 
@@ -141,7 +141,7 @@ def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         return sub
-    except JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
