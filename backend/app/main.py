@@ -118,7 +118,8 @@ def _recover_interrupted_jobs() -> None:
     A record left in "running" is otherwise reported as an active job forever,
     and the containers it stopped are never restarted.
     """
-    import json, logging
+    import json
+    import logging
     _log = logging.getLogger(__name__)
     try:
         from datetime import datetime, timezone
@@ -176,7 +177,8 @@ def _recover_interrupted_jobs() -> None:
 
 def _sweep_backup_temp_dir() -> None:
     """Remove archives left behind by an interrupted or failed run."""
-    import logging, shutil
+    import logging
+    import shutil
     _log = logging.getLogger(__name__)
     try:
         temp_dir = settings.BACKUP_TEMP_DIR
