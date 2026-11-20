@@ -1,0 +1,165 @@
+name: Release
+
+# Publishes Docker images to Docker Hub.
+#
+# Beta: pushing a tag like 3.1.2-beta.1 (on any commit, e.g. a PR branch)
+#   publishes :v3.1.2-beta.1 and :beta, and a GitHub pre-release.
+#   The base version (3.1.2) must match the VERSION file.
+# Release: a push to main that changes VERSION to an untagged version publishes
+#   :vX.Y.Z and :latest, then tags the commit X.Y.Z and creates a GitHub release.
+#   Pushes to main that don't change the version publish nothing.
+#
+# Requires repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN
+# (a Docker Hub access token with Read & Write scope).
+
+on:
+  push:
+    branches: [main]
+    tags: ["[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: coltondx/docker-volume-backup-manager-v3
+
+jobs:
+  prepare:
+    name: Decide what to publish
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      channel: ${{ steps.plan.outputs.channel }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Plan
+        id: plan
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          file_version="$(tr -d '[:space:]' < VERSION)"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            version="$GITHUB_REF_NAME"
+            if [ "${version%%-*}" != "$file_version" ]; then
+              echo "::error::Tag ${version} does not match VERSION (${file_version})"
+              exit 1
+            fi
+            echo "channel=beta" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            version="$file_version"
+            echo "channel=release" >> "$GITHUB_OUTPUT"
+            if git diff --quiet "$BEFORE" "$GITHUB_SHA" -- VERSION; then
+              echo "VERSION unchanged in this push; nothing to publish."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+            elif git ls-remote --exit-code --tags origin "refs/tags/${version}" > /dev/null; then
+              echo "Version ${version} is already tagged; nothing to publish."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+  checks:
+    name: CI checks
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Build, smoke test and push
+    needs: [prepare, checks]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      CHANNEL: ${{ needs.prepare.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The image shows VERSION in the UI and /health, so betas display their full tag.
+      - name: Stamp version
+        run: echo "$VERSION" > VERSION
+
+      - name: Docker tags
+        id: tags
+        run: |
+          if [ "$CHANNEL" = "beta" ]; then
+            moving="beta"
+          else
+            moving="latest"
+          fi
+          {
+            echo "list<<EOF"
+            echo "${IMAGE}:v${VERSION}"
+            echo "${IMAGE}:${moving}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: dvbm:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: |
+          docker run -d --name dvbm-smoke -p 127.0.0.1:8000:8000 \
+            -e SSL_ENABLED=false \
+            -e APP_PASSWORD=smoke-test-only \
+            -e JWT_SECRET="$(openssl rand -hex 32)" \
+            dvbm:smoke
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health > health.json; then break; fi
+            sleep 2
+          done
+          cat health.json
+          reported="$(jq -r .version health.json)"
+          if [ "$reported" != "$VERSION" ]; then
+            echo "::error::Image reports version '${reported}', expected '${VERSION}'"
+            docker logs dvbm-smoke
+            exit 1
+          fi
+          curl -fsS -o /dev/null http://127.0.0.1:8000/
+          docker rm -f dvbm-smoke
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.list }}
+          cache-from: type=gha
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$CHANNEL" = "beta" ]; then
+            gh release create "$VERSION" --title "$VERSION" --prerelease --generate-notes --verify-tag
+          else
+            gh release create "$VERSION" --title "$VERSION" --target "$GITHUB_SHA" --generate-notes
+          fi
