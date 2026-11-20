@@ -733,7 +733,7 @@ services:
       - CONTAINERS=1
       - IMAGES=1
       - VOLUMES=1
-      - POST=1          # required to start/stop containers
+      - POST=1          # required to start/stop containers and run helper containers
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
@@ -744,6 +744,32 @@ services:
       - DOCKER_SOCKET=tcp://docker-socket-proxy:2375
     # and remove the direct - /var/run/docker.sock:/var/run/docker.sock mount
 ```
+
+Which endpoint the app uses:
+
+1. If `DOCKER_HOST` is set in the environment, it is used (the standard Docker
+   SDK behavior, including `DOCKER_TLS_VERIFY` / `DOCKER_CERT_PATH`).
+2. Otherwise `DOCKER_SOCKET` is used (default `unix:///var/run/docker.sock`).
+
+`DOCKER_HOST` therefore wins if both are set. The chosen endpoint is logged once
+when the app first connects to Docker (`Docker endpoint: ...`), so you can
+confirm the proxy is in use.
+
+The app needs these Docker API operations: list/inspect/start/stop containers
+(`CONTAINERS`, `POST`), inspect volumes (`VOLUMES`), check for and pull the
+`alpine:3.20` helper image (`IMAGES`, `POST`), and create, run, read/write
+archives in, and remove helper containers (`CONTAINERS`, `POST`). `POST=1`
+covers every non-GET method: create and start/stop (POST), archive upload
+(PUT) and remove (DELETE). `VERSION` and `PING` are allowed by default.
+
+The proxy limits which API sections are reachable, but with `CONTAINERS` and
+`POST` enabled it can still create containers, so treat it as reducing
+exposure, not as a sandbox.
+
+**Upgrading:** earlier versions ignored `DOCKER_SOCKET` and always used
+`DOCKER_HOST` or the default socket. It is now honored, so if you already set
+`DOCKER_SOCKET` to a proxy, confirm the proxy permits the operations above
+before upgrading.
 
 Keep the app on a trusted network and behind authentication regardless.
 
