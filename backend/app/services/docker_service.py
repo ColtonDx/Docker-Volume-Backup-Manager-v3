@@ -19,6 +19,30 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def create_docker_client():
+    """Create the Docker SDK client, honoring the configured endpoint.
+
+    Precedence:
+      1. ``DOCKER_HOST`` set in the environment -> ``docker.from_env()``
+         (existing behavior; also reads DOCKER_TLS_VERIFY / DOCKER_CERT_PATH).
+      2. Otherwise ``settings.DOCKER_SOCKET`` (default
+         ``unix:///var/run/docker.sock``).
+    """
+    import docker
+
+    from app.config import settings
+
+    if os.environ.get("DOCKER_HOST"):
+        client = docker.from_env()
+        logger.info("Docker endpoint: %s (from DOCKER_HOST)", os.environ["DOCKER_HOST"])
+        return client
+
+    endpoint = settings.DOCKER_SOCKET
+    client = docker.DockerClient(base_url=endpoint)
+    logger.info("Docker endpoint: %s (from DOCKER_SOCKET)", endpoint)
+    return client
+
+
 class DockerService:
     """Wrapper around the Docker SDK client."""
 
@@ -36,8 +60,7 @@ class DockerService:
     def client(self):
         if self._client is None:
             try:
-                import docker
-                self._client = docker.from_env()
+                self._client = create_docker_client()
             except Exception as exc:
                 logger.warning("Docker not available: %s", exc)
         return self._client

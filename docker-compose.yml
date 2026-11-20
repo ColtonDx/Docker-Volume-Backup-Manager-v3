@@ -10,6 +10,8 @@ services:
       # WARNING: access to the Docker socket is equivalent to root on the host.
       # To limit exposure, front the daemon with a docker-socket-proxy and set
       # DOCKER_SOCKET=tcp://<proxy>:2375 instead of mounting the raw socket.
+      # DOCKER_SOCKET is used unless DOCKER_HOST is also set; DOCKER_HOST takes
+      # precedence. The endpoint in use is logged when the app first connects to Docker.
       # See the "Security" section of the README.
       - /var/run/docker.sock:/var/run/docker.sock
       # Persistent data (SQLite database + auto-generated TLS certs)
