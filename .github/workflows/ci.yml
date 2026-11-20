@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Lets the release workflow run the same checks before publishing.
+  workflow_call:
 
 # Cancel superseded runs on the same ref.
 concurrency:
