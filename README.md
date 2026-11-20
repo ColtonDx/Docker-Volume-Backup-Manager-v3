@@ -228,6 +228,10 @@ Settings are configured through the Settings page in the UI. They are stored in 
 | rclone Config (text) | Empty | Paste your `rclone.conf` content here. It is written to the config path above on save. This is the easiest way to configure rclone without bind-mounting the config file. |
 | rclone Flags | Empty | Extra CLI flags passed to every rclone command (e.g. `--transfers 4`). |
 
+A status line under these fields shows where the rclone config comes from: the text saved in Settings, a config file found at the config path (for example one you bind-mounted), or none. For a file it lists the remote names it defines; the file's contents are never shown.
+
+If you bind-mount your own `rclone.conf`, leave the text field empty and the file is used as is. DVBM never silently replaces an existing config file: on startup it only writes the saved text when the file is missing, and saving or importing new text over a file that was not written by Settings asks for confirmation first (API: `overwrite_rclone_config`).
+
 ### Backup behavior
 
 | Setting | Default | Description |
@@ -591,10 +595,11 @@ All API routes require a `Bearer` token in the `Authorization` header. Get a tok
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/settings` | Get all settings as a key-value object. |
-| `PUT` | `/api/settings` | Update settings. Body: `{"settings": {"key": "value", ...}}`. |
+| `PUT` | `/api/settings` | Update settings. Body: `{"settings": {"key": "value", ...}}`. Returns `409` if the rclone config text would replace an existing config file not written by Settings; resend with `"overwrite_rclone_config": true` to confirm. |
+| `GET` | `/api/settings/rclone/status` | Where the rclone config comes from (`ui`, `file` or `none`), its path, remote names and modification time. Never returns file contents. |
 | `POST` | `/api/settings/reset` | Reset all settings to defaults. |
 | `GET` | `/api/settings/export` | Download all configuration as a `.zip` file. |
-| `POST` | `/api/settings/import` | Upload a previously exported `.zip` to restore configuration. |
+| `POST` | `/api/settings/import` | Upload a previously exported `.zip` to restore configuration. An existing rclone config file is left unchanged unless `?overwrite_rclone_config=true` is passed. |
 | `POST` | `/api/settings/config-backup/run` | Trigger a config backup immediately. |
 
 ---

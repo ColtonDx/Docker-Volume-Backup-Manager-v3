@@ -206,6 +206,16 @@ export interface SettingsBundle {
   settings: Record<string, unknown>;
 }
 
+export interface RcloneStatus {
+  config_path: string;
+  file_exists: boolean;
+  source: "ui" | "file" | "none";
+  file_differs_from_saved: boolean;
+  remotes: string[];
+  error?: string | null;
+  modified?: string | null;
+}
+
 // Dashboard
 export interface DashboardStats {
   total_jobs: number;

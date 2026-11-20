@@ -624,7 +624,30 @@ Update one or more settings. Send the full `settings` map or just the keys you w
 }
 ```
 
+Add `"overwrite_rclone_config": true` to the body to confirm replacing an existing rclone config file that was not written by Settings (for example a mounted file). Without it, saving rclone config text over such a file returns `409` and nothing is saved.
+
 **Response `200`:** Updated `SettingsBundle` (same shape as `GET /settings`)
+
+---
+
+### `GET /settings/rclone/status`
+
+Describe where the rclone config comes from. Never includes the file contents or any secret values.
+
+**Response `200`:**
+```json
+{
+  "config_path": "/root/.config/rclone/rclone.conf",
+  "file_exists": true,
+  "source": "file",
+  "file_differs_from_saved": true,
+  "remotes": ["myremote", "gdrive"],
+  "error": null,
+  "modified": "2026-11-20T10:15:00+00:00"
+}
+```
+
+`source` is `ui` when config text is saved in Settings, `file` when only a file exists, and `none` otherwise.
 
 ---
 
@@ -648,7 +671,7 @@ Download all configuration (jobs, schedules, storages, retention policies, notif
 
 Import configuration from a `.zip` file exported by `GET /settings/export`. Existing records are upserted by primary key.
 
-**Request:** `multipart/form-data` with a `file` field containing the `.zip`.
+**Request:** `multipart/form-data` with a `file` field containing the `.zip`. Optional query parameter `overwrite_rclone_config=true` allows imported rclone config text to replace an existing config file that was not written by Settings; otherwise that file is left unchanged and the response contains `"rclone_config_skipped": true` under `imported`.
 
 **Response `200`:**
 ```json

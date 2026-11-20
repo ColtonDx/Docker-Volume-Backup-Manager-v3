@@ -74,7 +74,7 @@ When the container starts, `backend/start.py` runs first (it is the Docker `CMD`
 Uvicorn loads `backend/app/main.py`, which triggers the FastAPI `lifespan` startup hook:
 
 1. `init_db()` — creates any missing database tables; runs lightweight column-addition migrations.
-2. `_sync_rclone_config_on_startup()` — if an rclone config was previously saved via the UI, writes it back to disk (the container filesystem is ephemeral).
+2. `_sync_rclone_config_on_startup()` — if an rclone config was previously saved via the UI, writes it back to disk (the container filesystem is ephemeral). An existing file is never replaced (a differing one is logged as a warning), so a mounted config is not clobbered.
 3. `_configure_syslog_on_startup()` — attaches a syslog log handler if syslog was enabled in settings.
 4. `scheduler_service.start()` — loads all enabled backup schedules from the database and registers them with APScheduler.
 
@@ -142,13 +142,13 @@ Each file handles one resource area. All routes require a valid JWT (`dependenci
 | `auth.py` | `/api/auth` | `POST /login` — validates password, returns JWT. |
 | `jobs.py` | `/api/jobs` | CRUD for backup jobs. `POST /{id}/run` triggers an immediate backup. `GET /{id}/stats` returns per-job dashboard data. Each job response is *enriched* with live data from Docker (matched containers) and the most recent backup record. |
 | `schedules.py` | `/api/schedules` | CRUD for cron schedules. |
-| `storages.py` | `/api/storages` | CRUD for storage backends. `POST /{id}/test` tests connectivity. `GET /rclone/remotes` lists configured rclone remotes. |
+| `storages.py` | `/api/storages` | CRUD for storage backends. `POST /{id}/test` tests connectivity. `GET /rclone/remotes` lists configured rclone remotes (shared helper in `services/rclone_config.py`). |
 | `rotations.py` | `/api/rotations` | CRUD for retention policies. `POST /{id}/apply` runs cleanup immediately. |
 | `backups.py` | `/api/backups` | List/get backup records. `POST /{id}/restore` triggers a restore. `DELETE /{id}` removes a record (and optionally the remote file). |
 | `dashboard.py` | `/api/dashboard` | Aggregated stats for the home screen: job counts, success rates, recent activity, upcoming schedules. |
 | `logs.py` | `/api/logs` | Query log entries with level/job filtering and pagination. |
 | `notifications.py` | `/api/notifications` | CRUD for notification channels. |
-| `settings.py` | `/api/settings` | Get/set all key-value settings. Saving triggers `_sync_rclone_config()` to write the rclone config file to disk. Supports export (ZIP download) and import. |
+| `settings.py` | `/api/settings` | Get/set all key-value settings. Saving writes the rclone config file to disk via `services/rclone_config.py`, which refuses (409) to replace a file not written by Settings unless `overwrite_rclone_config` is set. `GET /rclone/status` reports the config source, path and remotes (never contents). Supports export (ZIP download) and import. |
 
 ### Schemas (`backend/app/schemas.py`)
 

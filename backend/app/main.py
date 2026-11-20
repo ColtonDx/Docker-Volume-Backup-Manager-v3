@@ -93,19 +93,29 @@ def _sync_rclone_config_on_startup() -> None:
         from app.models import Setting
         db = SessionLocal()
         try:
-            config_text = None
-            for key in ("rclone_config_inline", "rclone_config_text"):
-                row = db.get(Setting, key)
-                if row and row.value:
-                    val = json.loads(row.value) if row.value.startswith('"') else row.value
-                    if isinstance(val, str) and val.strip():
-                        config_text = val.strip()
-                        break
+            from app.services import rclone_config
+            stored = {row.key: row.value for row in db.query(Setting).filter(
+                Setting.key.in_(rclone_config.TEXT_KEYS)
+            )}
+            decoded = {}
+            for key, raw in stored.items():
+                try:
+                    decoded[key] = json.loads(raw) if raw and raw.startswith('"') else raw
+                except ValueError:
+                    decoded[key] = raw
+            config_text = rclone_config.config_text_from(decoded)
             if config_text:
                 config_path = Path(settings.RCLONE_CONFIG)
-                config_path.parent.mkdir(parents=True, exist_ok=True)
-                config_path.write_text(config_text + "\n")
-                _log.info("Rclone config synced to %s on startup", config_path)
+                existing = rclone_config.read_config(config_path)
+                if existing is None:
+                    if rclone_config.write_config(config_path, config_text):
+                        _log.info("Rclone config synced to %s on startup", config_path)
+                elif existing != config_text:
+                    # Never replace a file that is already there (e.g. mounted).
+                    _log.warning(
+                        "Rclone config at %s differs from the config saved in Settings; "
+                        "leaving the file unchanged", config_path,
+                    )
         finally:
             db.close()
     except Exception as exc:

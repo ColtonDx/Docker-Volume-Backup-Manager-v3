@@ -388,6 +388,9 @@ class SettingItem(BaseModel):
 class SettingsBundle(BaseModel):
     """Flat dictionary of all settings."""
     settings: dict[str, Any] = {}
+    # Set to confirm replacing an rclone config file that was not written by
+    # Settings (for example one mounted into the container).
+    overwrite_rclone_config: bool = False
 
 
 # ---- Dashboard -----------------------------------------------------------
