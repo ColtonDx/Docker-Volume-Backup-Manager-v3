@@ -17,7 +17,7 @@ Unauthenticated liveness/readiness probe. Returns `200` when the database and sc
   "status": "ok",
   "database": "ok",
   "scheduler": "running",
-  "version": "3.1.2",
+  "version": "3.1.3",
   "report_issue_url": "https://github.com/ColtonDx/Docker-Volume-Backup-Manager-v3/issues/new"
 }
 ```
