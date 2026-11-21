@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.config import settings
+from app.config import get_report_issue_url, settings
 from app.database import init_db
 
 # Router imports
@@ -306,6 +306,7 @@ def health():
             "database": "ok" if db_ok else "error",
             "scheduler": "running" if scheduler_ok else "stopped",
             "version": settings.APP_VERSION,
+            "report_issue_url": get_report_issue_url(),
         },
     )
 

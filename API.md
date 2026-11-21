@@ -6,6 +6,26 @@ All endpoints are prefixed with `/api`. Most endpoints require a Bearer token ob
 
 ---
 
+## Health
+
+### `GET /health` (also `/api/health`)
+
+Unauthenticated liveness/readiness probe. Returns `200` when the database and scheduler are healthy, otherwise `503` with the same body shape.
+
+```json
+{
+  "status": "ok",
+  "database": "ok",
+  "scheduler": "running",
+  "version": "3.1.2",
+  "report_issue_url": "https://github.com/ColtonDx/Docker-Volume-Backup-Manager-v3/issues/new"
+}
+```
+
+`report_issue_url` is the target of the sidebar "Report a problem" link. It comes from the `REPORT_ISSUE_URL` environment variable; an empty string means the link is hidden.
+
+---
+
 ## Authentication
 
 ### `POST /auth/login`
