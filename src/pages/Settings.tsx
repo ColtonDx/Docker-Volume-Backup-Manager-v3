@@ -16,7 +16,8 @@ import {
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchSettings, updateSettings, resetSettings, clearLogs, fetchStorages, fetchSchedules, fetchNotifications, fetchRotations, triggerConfigBackup } from "@/api";
+import { fetchSettings, updateSettings, resetSettings, clearLogs, fetchStorages, fetchSchedules, fetchNotifications, fetchRotations, triggerConfigBackup, fetchRcloneStatus } from "@/api";
+import { describeRcloneStatus, needsRcloneOverwriteConfirm } from "./rcloneStatus";
 import { useColorTheme, THEMES, type ThemeId } from "@/contexts/ColorThemeContext";
 
 export default function Settings() {
@@ -24,9 +25,11 @@ export default function Settings() {
   const { colorTheme, setColorTheme } = useColorTheme();
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmRcloneOverwrite, setConfirmRcloneOverwrite] = useState(false);
 
   const { data, isLoading } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
   const s = (data?.settings ?? {}) as Record<string, unknown>;
+  const { data: rcloneStatus } = useQuery({ queryKey: ["rclone-status"], queryFn: fetchRcloneStatus });
   const { data: storages = [] } = useQuery({ queryKey: ["storages"], queryFn: fetchStorages });
   const { data: schedules = [] } = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
   const { data: notifications = [] } = useQuery({ queryKey: ["notifications"], queryFn: fetchNotifications });
@@ -42,10 +45,21 @@ export default function Settings() {
   const set = (key: string, val: unknown) => setForm((p) => ({ ...p, [key]: val }));
 
   const saveMut = useMutation({
-    mutationFn: () => updateSettings(form),
-    onSuccess: () => { toast.success("Settings saved"); queryClient.invalidateQueries({ queryKey: ["settings"] }); },
+    mutationFn: (overwriteRcloneConfig: boolean) => updateSettings(form, overwriteRcloneConfig),
+    onSuccess: () => {
+      toast.success("Settings saved");
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({ queryKey: ["rclone-status"] });
+    },
     onError: (err: Error) => toast.error(err.message),
   });
+  const handleSave = () => {
+    if (needsRcloneOverwriteConfirm(form.rclone_config_inline, s.rclone_config_inline, rcloneStatus)) {
+      setConfirmRcloneOverwrite(true);
+    } else {
+      saveMut.mutate(false);
+    }
+  };
   const resetMut = useMutation({
     mutationFn: resetSettings,
     onSuccess: () => { toast.success("Settings reset to defaults"); queryClient.invalidateQueries({ queryKey: ["settings"] }); },
@@ -83,8 +97,10 @@ export default function Settings() {
         throw new Error(err.detail || "Import failed");
       }
       const result = await res.json();
-      const counts = Object.entries(result.imported || {}).map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ");
+      const { rclone_config_skipped: rcloneSkipped, ...importedCounts } = (result.imported || {}) as Record<string, unknown>;
+      const counts = Object.entries(importedCounts).map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ");
       toast.success(`Config imported: ${counts}`);
+      if (rcloneSkipped) toast.warning("An existing rclone config file was left unchanged. Save the rclone config in Settings to replace it.");
       queryClient.invalidateQueries();
     } catch (err: any) {
       toast.error(err.message || "Import failed");
@@ -128,7 +144,7 @@ export default function Settings() {
         title="Settings"
         description="Configure global system settings"
         action={
-          <Button className="gap-2" onClick={() => saveMut.mutate()}>
+          <Button className="gap-2" onClick={handleSave}>
             <Save className="h-4 w-4" />
             Save Changes
           </Button>
@@ -256,6 +272,12 @@ export default function Settings() {
               <Label>Rclone Config File</Label>
               <Input className="bg-background border-border font-mono text-sm" value={(form.rclone_config_path as string) || "/root/.config/rclone/rclone.conf"} onChange={(e) => set("rclone_config_path", e.target.value)} />
             </div>
+            {rcloneStatus && (
+              <p className="text-sm text-muted-foreground font-mono" data-testid="rclone-status">
+                {describeRcloneStatus(rcloneStatus)}
+                {rcloneStatus.error ? ` (${rcloneStatus.error})` : ""}
+              </p>
+            )}
             <div className="space-y-2">
               <Label>Additional Rclone Flags</Label>
               <Input className="bg-background border-border font-mono text-sm" placeholder="--transfers=4 --checkers=8" value={(form.rclone_flags as string) || ""} onChange={(e) => set("rclone_flags", e.target.value)} />
@@ -560,6 +582,21 @@ export default function Settings() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => { if (confirmImport) handleImportConfig(confirmImport); setConfirmImport(null); }}>Import</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmRcloneOverwrite} onOpenChange={setConfirmRcloneOverwrite}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace existing rclone config file?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A rclone config file already exists at {rcloneStatus?.config_path} and was not written by Settings (for example a mounted file). Saving the pasted config will overwrite it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => saveMut.mutate(true)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Overwrite</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

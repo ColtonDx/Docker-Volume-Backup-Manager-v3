@@ -22,6 +22,7 @@ import type {
   ScheduleCreate,
   ScheduleUpdate,
   SettingsBundle,
+  RcloneStatus,
   StorageBackend,
   StorageBackendCreate,
   StorageBackendUpdate,
@@ -129,7 +130,9 @@ export const testNotification = (id: number) => api.post<TestResponse>(`/notific
 
 // ---- Settings -----------------------------------------------------------
 export const fetchSettings = () => api.get<SettingsBundle>("/settings");
-export const updateSettings = (settings: Record<string, unknown>) => api.put<SettingsBundle>("/settings", { settings });
+export const updateSettings = (settings: Record<string, unknown>, overwriteRcloneConfig = false) =>
+  api.put<SettingsBundle>("/settings", { settings, overwrite_rclone_config: overwriteRcloneConfig });
+export const fetchRcloneStatus = () => api.get<RcloneStatus>("/settings/rclone/status");
 export const resetSettings = () => api.post<SettingsBundle>("/settings/reset");
 export const triggerConfigBackup = () => api.post<MessageResponse>("/settings/config-backup/run");
 
