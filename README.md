@@ -135,6 +135,10 @@ services:
       # How long a login session lasts, in hours. Default: 24.
       # - JWT_EXPIRE_HOURS=24
 
+      # Target of the "Report a problem" link in the sidebar. Defaults to this
+      # project's GitHub issue form; set it to an empty value to hide the link.
+      # - REPORT_ISSUE_URL=https://github.com/ColtonDx/Docker-Volume-Backup-Manager-v3/issues/new
+
       # Name shown in the sidebar. Default: Docker Volume Backup Manager.
       # - APP_NAME=Docker Volume Backup Manager
 
