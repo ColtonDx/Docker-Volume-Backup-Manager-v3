@@ -22,6 +22,7 @@ ARG RCLONE_SHA256_AMD64=b00f00b3266c3764413afe599d3ec316f6f43b3e0ea8a0bc1d186d21
 ARG RCLONE_SHA256_ARM64=ee169016675e23a69d77240565133ff7dbc9b33d16fa8f7053d4af39f1eaeb78
 RUN set -eux; \
     apt-get update; \
+    apt-get upgrade -y --no-install-recommends; \
     apt-get install -y --no-install-recommends curl unzip ca-certificates libsqlcipher-dev; \
     case "$(dpkg --print-architecture)" in \
         amd64) rclone_arch=amd64; rclone_sha256="${RCLONE_SHA256_AMD64}" ;; \
@@ -45,6 +46,7 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc && \
+    pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     apt-get purge -y gcc && \
     apt-get autoremove -y && \
