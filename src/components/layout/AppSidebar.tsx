@@ -12,11 +12,13 @@ import {
   ArchiveRestore,
   RefreshCw,
   Activity,
+  Bug,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAutoRefresh, REFRESH_OPTIONS } from "@/contexts/AutoRefreshContext";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSettings } from "@/api";
+import { fetchReportIssueUrl } from "@/lib/reportIssue";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -54,6 +56,11 @@ export function AppSidebar() {
   const { logout } = useAuth();
   const { interval, setInterval } = useAutoRefresh();
   const { data: settingsData } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
+  const { data: reportIssueUrl } = useQuery({
+    queryKey: ["report-issue-url"],
+    queryFn: fetchReportIssueUrl,
+    staleTime: Infinity,
+  });
   const instanceName = (settingsData?.settings as Record<string, unknown>)?.instance_name as string || "Docker Volume Backup Manager";
   
   return (
@@ -177,6 +184,17 @@ export function AppSidebar() {
             <LogOut className="h-3.5 w-3.5" />
           </button>
         </div>
+        {reportIssueUrl && (
+          <a
+            href={reportIssueUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Bug className="h-3.5 w-3.5" />
+            <span>Report a problem</span>
+          </a>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

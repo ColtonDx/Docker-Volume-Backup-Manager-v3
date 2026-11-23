@@ -23,6 +23,23 @@ def _read_version() -> str:
     return "0.0.0-dev"
 
 
+DEFAULT_REPORT_ISSUE_URL = (
+    "https://github.com/ColtonDx/Docker-Volume-Backup-Manager-v3/issues/new"
+)
+
+
+def get_report_issue_url() -> str:
+    """URL of the "Report a problem" link shown in the UI.
+
+    Read from REPORT_ISSUE_URL at call time. Unset uses the default; an empty
+    (or whitespace-only) value disables the link and returns "".
+    """
+    value = os.getenv("REPORT_ISSUE_URL")
+    if value is None:
+        return DEFAULT_REPORT_ISSUE_URL
+    return value.strip()
+
+
 class Settings:
     """Application settings loaded from environment variables."""
 
